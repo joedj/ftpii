@@ -165,7 +165,7 @@ int inRoot(){
   return in;
 }
 
-int setCWD(char* path){
+void setCWD(char* path){
   lockMutex();
   //printf("set CWD=%s\n",path);
   strcpy(cwd,path);
