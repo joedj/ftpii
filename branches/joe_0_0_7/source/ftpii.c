@@ -59,6 +59,9 @@ typedef struct client_struct client_t;
 static volatile u8 num_clients = 0;
 static volatile u16 passive_port = 1024;
 
+static mutex_t global_mutex;
+static mutex_t chdir_mutex;
+
 /* for "debugging" */
 // void wait_for_continue(char *msg) {
 //     printf(msg);
@@ -82,17 +85,14 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
     return write_exact(client->socket, msgbuf, msglen);
 }
 
-static mutex_t chdir_mutex;
-
 /*
     Returns 0 on success
     On failure, the mutex is unlocked
 */
 static s32 enter_cwd_context(client_t *client) {
-    s32 result = LWP_MutexLock(chdir_mutex);
-    if (result) return result;
-    result = chdir(client->cwd);
-    if (result) LWP_MutexUnlock(chdir_mutex);
+    mutex_acquire(chdir_mutex);
+    s32 result = chdir(client->cwd);
+    if (result) mutex_release(chdir_mutex);
     return result;
 }
 
@@ -105,10 +105,16 @@ static s32 enter_cwd_context(client_t *client) {
 static s32 exit_cwd_context(client_t *client) {
     s32 getcwd_result = getcwd(client->cwd, MAXPATHLEN) ? 0 : -1;
     s32 result = chdir("/");
+    mutex_release(chdir_mutex);
     if (!result) result = getcwd_result;
-    s32 unlock_result = LWP_MutexUnlock(chdir_mutex);
-    if (!result) result = unlock_result;
     return result;
+}
+
+static void close_passive_socket(client_t *client) {
+    if (client->passive_socket >= 0) {
+        net_close(client->passive_socket);
+        client->passive_socket = -1;
+    }
 }
 
 typedef s32 (*ftp_command_handler)(client_t *client, char *args);
@@ -129,13 +135,10 @@ static s32 ftp_PASS(client_t *client, char *password) {
 }
 
 static s32 ftp_REIN(client_t *client, char *rest) {
+    close_passive_socket(client);
     client->cwd[0] = '/';
     client->cwd[1] = '\0';
     client->representation_type = 'A';
-    if (client->passive_socket >= 0) {
-        net_close(client->passive_socket);
-        client->passive_socket = -1;
-    }
     return write_reply(client, 220, "Service ready for new user.");
 }
 
@@ -265,7 +268,7 @@ static s32 ftp_SIZE(client_t *client, char *path) {
 }
 
 static s32 ftp_PASV(client_t *client, char *rest) {
-    if (client->passive_socket >= 0) net_close(client->passive_socket);
+    close_passive_socket(client);
     client->passive_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (client->passive_socket < 0) {
         return write_reply(client, 520, "Unable to create listening socket.");
@@ -273,17 +276,17 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(passive_port++); // XXX: not thread-safe...also will overflow eventually
+    mutex_acquire(global_mutex);
+    bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
+    mutex_release(global_mutex);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
-        net_close(client->passive_socket);
-        client->passive_socket = -1;
+        close_passive_socket(client);
         return write_reply(client, 520, "Unable to bind listening socket.");
     }
     if ((result = net_listen(client->passive_socket, 1)) < 0) {
-        net_close(client->passive_socket);
-        client->passive_socket = -1;
+        close_passive_socket(client);
         return write_reply(client, 520, "Unable to listen on socket.");
     }
     char reply[49];
@@ -305,14 +308,11 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
     if (!inet_aton(addr_str, &sin_addr)) {
         return write_reply(client, 501, "Syntax error in parameters or arguments.");
     }
+    close_passive_socket(client);
     u16 port = ((p1 &0xff) << 8) | (p2 & 0xff);
     client->address.sin_addr = sin_addr;
     client->address.sin_port = htons(port);
     printf("Set client address to %s:%u\n", addr_str, port);
-    if (client->passive_socket >= 0) {
-        net_close(client->passive_socket);
-        client->passive_socket = -1;
-    }
     return write_reply(client, 200, "PORT command successful.");
 }
 
@@ -677,11 +677,12 @@ static void *process_connection(void *client_ptr) {
     recv_loop_end:
 
     net_close(client->socket);
-    if (client->passive_socket >= 0) {
-        net_close(client->passive_socket);
-    }
+    close_passive_socket(client);
     free(client);
+
+    mutex_acquire(global_mutex);
     num_clients--;
+    mutex_release(global_mutex);
 
     printf("Done doing stuffs!\n");
     return NULL;
@@ -694,16 +695,18 @@ static void mainloop() {
         struct sockaddr_in client_address;
         s32 peer = accept_peer(server, &client_address);
 
+        mutex_acquire(global_mutex);
+
         if (num_clients == MAX_CLIENTS) {
+            mutex_release(global_mutex);
             printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
             net_close(peer);
             continue;
         }
-        
-        num_clients++;
 
         client_t *client = malloc(sizeof(client_t));
         if (!client) {
+            mutex_release(global_mutex);
             printf("Could not allocate memory for client state, not accepting client.\n");
             net_close(peer);
             continue;
@@ -722,7 +725,11 @@ static void mainloop() {
             printf("Error creating client thread, not accepting client.\n");
             net_close(peer);
             free(client);
+        } else {
+            num_clients++;
         }
+        
+        mutex_release(global_mutex);
     }
 }
 
@@ -744,6 +751,7 @@ int main(int argc, char **argv) {
         printf("Unable to start mount thread - no remounting while running!\n");
     }
     wait_for_network_initialisation();
+    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
     if (LWP_MutexInit(&chdir_mutex, true)) die("Could not initialise chdir mutex, exiting");
     
     mainloop();

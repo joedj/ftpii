@@ -42,6 +42,14 @@ misrepresented as being the original software.
 const char *CRLF = "\r\n";
 const u32 CRLF_LENGTH = 2;
 
+void mutex_acquire(mutex_t m) {
+    while (LWP_MutexLock(m));
+}
+
+void mutex_release(mutex_t m) {
+    while (LWP_MutexUnlock(m));
+}
+
 static bool can_open_root_fs() {
     DIR_ITER *root = diropen("/");
     if (root) dirclose(root);
