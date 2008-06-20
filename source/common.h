@@ -29,6 +29,9 @@ misrepresented as being the original software.
 const char *CRLF;
 const u32 CRLF_LENGTH;
 
+void mutex_acquire(mutex_t m);
+void mutex_release(mutex_t m);
+
 void initialise_fat();
 
 u8 initialise_reset_button();
