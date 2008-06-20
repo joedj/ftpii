@@ -734,10 +734,10 @@ static void mainloop() {
 int main(int argc, char **argv) {
     initialise_video();
     printf("\x1b[2;0H");
+    vrt_Init();
     initialise_fat();
     if (vrt_chdir("/")) die("Could not change to root directory, exiting");
     WPAD_Init();
-    vrt_Init();
     if (initialise_reset_button()) {
         printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     } else {

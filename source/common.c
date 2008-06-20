@@ -54,6 +54,7 @@ void initialise_fat() {
     // try to open root filesystem - if we don't check here, mkdir crashes later
     if (!can_open_root_fs()) die("Unable to open root filesystem, exiting");
     //if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
+    vrt_SetMount(RE_SD,1);
 }
 
 static volatile u8 reset = 0;
@@ -71,11 +72,12 @@ static void *run_reset_thread(void *arg) {
     exit(0);
 }
 
-static void remount(PARTITION_INTERFACE partition, char *deviceName) {
+static void remount(vrt_entry_interface re,PARTITION_INTERFACE partition, char *deviceName) {
     printf("Unmounting %s ...", deviceName);
     if (!fatUnmount(partition)) {
         printf("failure\n");
     } else {
+	vrt_SetMount(re,0);
         printf("done\n");
     }
     printf("To continue after changing the %s press 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
@@ -97,6 +99,7 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
         fatUnmount(partition);
     } else {
         printf("Success: %s is mounted\n", deviceName);
+	vrt_SetMount(re,1);
     }
 }
 
@@ -110,9 +113,9 @@ static void *run_mount_handle_thread(void *arg) {
         u32 wpad = WPAD_ButtonsHeld(0);
         WPAD_Flush(0);
         if (wpad & WPAD_BUTTON_1) {
-            remount(PI_INTERNAL_SD, "internal SD");
+            remount(RE_SD,PI_INTERNAL_SD, "internal SD");
         } else if (wpad & WPAD_BUTTON_2) {
-            //remount(PI_USBSTORAGE, "USB storage");
+            //remount(RE_USB,PI_USBSTORAGE, "USB storage");
         }
 
         sleep(1);

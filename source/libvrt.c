@@ -96,15 +96,76 @@ void vrt_DelEntry(vrt_entry_interface id){
    rootfs[id] = NULL;
 }
 
+// Some stuff to be more thread safe
+int lockMutex(){
+  return LWP_MutexLock(fs_mutex);
+}
+
+int unlockMutex(){
+  return LWP_MutexUnlock(fs_mutex);
+}
+
+int inRoot(){
+  lockMutex();
+  int in = (strlen(cwd) == 1 && cwd[0] == '/');
+  unlockMutex();
+  return in;
+}
+
+int isRoot(char* path){
+  return (strlen(path) == 1 && cwd[0] == '/');
+}
+
+void setCWD(char* path){
+  lockMutex();
+  //printf("set CWD=%s\n",path);
+  strcpy(cwd,path);
+  unlockMutex();
+}
+
+
 /** 
  * Mark filesystem (directory) as mounted
- * TODO Check for these in other functions
  */
 int vrt_SetMount(vrt_entry_interface id,int mounted){
   if(rootfs[id] != NULL){
     rootfs[id]->mounted = mounted;
     return 1;
   }
+  return 0;
+}
+
+int vrt_isMounted(char* vrt_path){
+  if(isRoot(vrt_path)){
+    return 1;
+  }
+  int i;
+  for(i = 0;i < MAX_VRT_ENTRYS; i++){
+    if(rootfs[i] != NULL){
+      if(strlen(rootfs[i]->prefix) <= strlen(vrt_path)){
+        if(strncmp(vrt_path,rootfs[i]->prefix,strlen(rootfs[i]->prefix)) == 0){
+	  return rootfs[i]->mounted;
+	}
+      }
+    }
+  }	
+  return 0;
+}
+
+int vrt_isRootDir(char* vrt_path){
+ if(isRoot(vrt_path)){
+    return 1;
+ }
+ int i;
+ for(i = 0;i < MAX_VRT_ENTRYS; i++){
+    if(rootfs[i] != NULL){
+      if(strlen(rootfs[i]->prefix) == strlen(vrt_path)){
+        if(strncmp(vrt_path,rootfs[i]->prefix,strlen(rootfs[i]->prefix)) == 0){
+	  return 1;
+	}
+      } 
+    }
+  }	
   return 0;
 }
 
@@ -149,29 +210,6 @@ int vrt_Fat2Path(char *fat_path,char *vrt_path){
   return 0;
 }
 
-// Some stuff to be more thread safe
-int lockMutex(){
-  return LWP_MutexLock(fs_mutex);
-}
-
-int unlockMutex(){
-  return LWP_MutexUnlock(fs_mutex);
-}
-
-int inRoot(){
-  lockMutex();
-  int in = (strlen(cwd) == 1 && cwd[0] == '/');
-  unlockMutex();
-  return in;
-}
-
-void setCWD(char* path){
-  lockMutex();
-  //printf("set CWD=%s\n",path);
-  strcpy(cwd,path);
-  unlockMutex();
-}
-
 /*
  * Abstract some of the default file and dir handling functions
  * so the upper layers could handle stuff with the vrt path.
@@ -209,7 +247,13 @@ int vrt_stat(char* path,struct stat* status){
     return 0;
   }
   if(vrt_Path2Fat(path,fat_path)){
-	  return stat(fat_path,status);
+    if(!vrt_isMounted(path)) {
+	if(vrt_isRootDir(path)){
+		return 0;
+	} 
+        return -1;
+    } 
+    return stat(fat_path,status);
   }
   //error(0,ENOENT,"");
   return -1;
@@ -220,15 +264,16 @@ int vrt_stat(char* path,struct stat* status){
  */
 char* vrt_getcwd(char* buf,size_t size){
    char fat_path[size];
-   getcwd(fat_path,size);
+   /*getcwd(fat_path,size);
    if(strlen(fat_path) == 1 && fat_path[0] == '/'){
      strcpy(buf,"/");
      return buf;
    }
    if(vrt_Fat2Path(fat_path,buf)){
      return buf;
-   } 
-   return NULL;
+   } */
+   strcpy(buf,cwd);
+   return buf;
 }
 
 /**
@@ -241,6 +286,13 @@ int vrt_chdir(char* path){
      return 0;
   }
   if(vrt_Path2Fat(path,fat_path)){
+    if(!vrt_isMounted(path)) {
+	    if(vrt_isRootDir(path)){
+	      setCWD(path);
+	      return 0;
+	    }
+	    return -1;
+    }
     int result = chdir(fat_path);
     if(!result){
       setCWD(path);
@@ -253,13 +305,12 @@ int vrt_chdir(char* path){
 
 /**
  * unlink
- * TODO We must check that this isn't called on the root to disallow delete of 
- * directorys in root
  */
 int vrt_unlink(char* path){
   char fat_path[strlen(path)];
   if(vrt_Path2Fat(path,fat_path)){
-    return unlink(fat_path);
+   if(!vrt_isMounted(path)) return -1;
+   return unlink(fat_path);
   } else if(!inRoot()) {
     int result = unlink(path);
     if(!result) return result;
@@ -270,13 +321,14 @@ int vrt_unlink(char* path){
 
 /**
  * mkdir
- * TODO Also check that isn't performed in root
  */
 int vrt_mkdir(char* path, mode_t mode){
   char fat_path[strlen(path)];
   if(vrt_Path2Fat(path,fat_path)){
+    if(!vrt_isMounted(path)) return -1;
     return mkdir(fat_path,mode);
   } else if(!inRoot()){
+    if(vrt_isMounted(cwd)) return -1;
     return mkdir(path,mode);
   } 
   //error(0,ENOENT,"");
@@ -286,12 +338,14 @@ int vrt_mkdir(char* path, mode_t mode){
 /**
  * rename 
  * TODO Also check that this ins't performed on root
+ * TODO Check for relative stuff
  */
 int vrt_rename(char* from_path,char* to_path){
   char fat_to_path[strlen(to_path)];
   char fat_from_path[strlen(from_path)];
-
+  printf("vrt_rename(%s,%s)\n",from_path,to_path);
   if(vrt_Path2Fat(to_path,fat_to_path) && vrt_Path2Fat(from_path,fat_from_path)){
+    printf("vrt_rename(%s,%s)\n",from_path,to_path);
     return rename(fat_from_path,fat_to_path);
   }
   //error(0,ENOENT,"");
@@ -312,6 +366,13 @@ DIR_ITER* vrt_diropen(char* path){
      iter->dirStruct = 0;
      return iter;
   }
+  if(!vrt_isMounted(path)){
+    DIR_ITER* iter;
+    iter = (DIR_ITER*) malloc(sizeof(DIR_ITER));
+    iter->device = VRT_DEVICE_ID + 1;
+    iter->dirStruct = 0;
+    return iter;
+  } else 
   if(vrt_Path2Fat(path,fat_path)){
     return diropen(fat_path);
   }
@@ -335,6 +396,8 @@ int vrt_dirnext(DIR_ITER *iter,char *filename, struct stat *filestat){
      return 0;
    }
    return 1;
+  } if(iter->device == VRT_DEVICE_ID + 1) {
+    return 1;
   } else {
     return dirnext(iter, filename,filestat);
   } 
@@ -356,7 +419,7 @@ int vrt_dirreset(DIR_ITER* iter){
  * dirclose
  */
 int vrt_dirclose(DIR_ITER *iter){
-  if(iter->device == VRT_DEVICE_ID){
+  if(iter->device == VRT_DEVICE_ID || iter->device == VRT_DEVICE_ID + 1){
     free(iter);
     return 0;
   } else {
