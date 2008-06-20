@@ -21,7 +21,7 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-include <sys/dir.h>
+#include <sys/dir.h>
 #include <sys/types.h>
 
 typedef enum {RE_SD,RE_USB,RE_GC1,RE_GC2} vrt_entry_interface;

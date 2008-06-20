@@ -34,7 +34,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#include "vroot.h"
+#include "libvrt.h"
 #include "common.h"
 
 #define NET_BUFFER_SIZE 1024
