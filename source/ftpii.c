@@ -33,7 +33,9 @@ misrepresented as being the original software.
 #include <wiiuse/wpad.h>
 #include <unistd.h>
 
+
 #include "common.h"
+#include "libvrt.h"
 
 extern u32 net_gethostip();
 
@@ -91,7 +93,7 @@ static mutex_t chdir_mutex;
 static s32 enter_cwd_context(client_t *client) {
     s32 result = LWP_MutexLock(chdir_mutex);
     if (result) return result;
-    result = chdir(client->cwd);
+    result = vrt_chdir(client->cwd);
     if (result) LWP_MutexUnlock(chdir_mutex);
     return result;
 }
@@ -100,11 +102,11 @@ static s32 enter_cwd_context(client_t *client) {
     Returns 0 on success
     On failure, the mutex is unlocked but the cwd is left in an unknown state.
     A thread must own the chdir_mutex (i.e. have previously called enter_cwd_context)
-    before it is allowed to call this function.
+    before it is allowed to call this unction.
 */
 static s32 exit_cwd_context(client_t *client) {
-    s32 getcwd_result = getcwd(client->cwd, MAXPATHLEN) ? 0 : -1;
-    s32 result = chdir("/");
+    s32 getcwd_result = vrt_getcwd(client->cwd, MAXPATHLEN) ? 0 : -1;
+    s32 result = vrt_chdir("/");
     if (!result) result = getcwd_result;
     s32 unlock_result = LWP_MutexUnlock(chdir_mutex);
     if (!result) result = unlock_result;
@@ -116,7 +118,7 @@ typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 s32 simple_cwd_context_handler(client_t *client, ftp_command_handler handler, char *rest) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
     s32 result = handler(client, rest);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting (simple_cwd_context_handler)");
     return result;
 }
 
@@ -186,18 +188,20 @@ static s32 ftp_PWD(client_t *client, char *rest) {
 
 static s32 ftp_CWD(client_t *client, char *path) {
     struct stat st;
-    if (stat(path, &st)) { // have to check this because if we give chdir bad input (e.g. "/fat:/SNES9X/") it can cause a crash
+    if (vrt_stat(path, &st)) { // have to check this because if we give chdir bad input (e.g. "/fat:/SNES9X/") it can cause a crash
+	printf("Failure in vrt_stat\n");
         return write_reply(client, 550, strerror(errno));
     }
-    if (!chdir(path)) {
+    if (!vrt_chdir(path)) {
         return write_reply(client, 250, "CWD command successful.");
     } else  {
+	printf("Failure in vrt_chdir(%s)\n",path);
         return write_reply(client, 550, strerror(errno));
     }
 }
 
 static s32 ftp_CDUP(client_t *client, char *rest) {
-    if (!chdir("..")) {
+    if (!vrt_chdir("..")) {
         return write_reply(client, 250, "CDUP command successful.");
     } else  {
         return write_reply(client, 550, strerror(errno));
@@ -205,7 +209,7 @@ static s32 ftp_CDUP(client_t *client, char *rest) {
 }
 
 static s32 ftp_DELE(client_t *client, char *path) {
-    if (!unlink(path)) {
+    if (!vrt_unlink(path)) {
         return write_reply(client, 250, "File or directory removed.");
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -216,12 +220,12 @@ static s32 ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters or arguments.");
     }
-    if (!mkdir(path, 0777)) {
+    if (!vrt_mkdir(path, 0777)) {
         // TODO: error-handling =P
         char new_path[MAXPATHLEN];
-        chdir(path);
-        getcwd(new_path, MAXPATHLEN);
-        chdir(client->cwd);
+        vrt_chdir(path);
+        vrt_getcwd(new_path, MAXPATHLEN);
+        vrt_chdir(client->cwd);
         char msg[MAXPATHLEN + 21];
         // TODO: escape double-quotes
         // XXX: for now, strip "fat:" from all paths we send to the client, because it screws with some FTP clients (e.g. FileZilla)
@@ -230,7 +234,7 @@ static s32 ftp_MKD(client_t *client, char *path) {
         sprintf(msg, "\"%s\" directory created.", stripped_path);
         return write_reply(client, 257, msg);
     } else {
-        return write_reply(client, 550, strerror(errno));
+        return write_reply(client, 551, strerror(errno));
     }
 }
 
@@ -244,7 +248,7 @@ static s32 ftp_RNTO(client_t *client, char *path) {
         return write_reply(client, 503, "RNFR required first.");
     }
     s32 result;
-    if (rename(client->pending_rename, path)) {
+    if (vrt_rename(client->pending_rename, path)) {
         result = write_reply(client, 550, strerror(errno));
     } else {
         result = write_reply(client, 250, "Rename successful.");
@@ -255,7 +259,7 @@ static s32 ftp_RNTO(client_t *client, char *path) {
 
 static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
-    if (!stat(path, &st)) {
+    if (!vrt_stat(path, &st)) {
         char size_buf[12];
         sprintf(size_buf, "%li", st.st_size); // XXX: what does this do for files over 2GB?
         return write_reply(client, 213, size_buf);
@@ -387,7 +391,7 @@ static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
     s32 result = 0;
     char filename[MAXPATHLEN + 2];
     struct stat st;
-    while (dirnext(dir, filename, &st) == 0) {
+    while (vrt_dirnext(dir, filename, &st) == 0) {
         size_t end_index = strlen(filename);
         filename[end_index] = CRLF[0];
         filename[end_index + 1] = CRLF[1];
@@ -404,7 +408,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     char filename[MAXPATHLEN];
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
-    while (dirnext(dir, filename, &st) == 0) {
+    while (vrt_dirnext(dir, filename, &st) == 0) {
         sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1900 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
         if ((result = write_exact(data_socket, line, strlen(line))) < 0) {
             break;
@@ -419,8 +423,8 @@ static s32 ftp_NLST(client_t *client, char *path) {
     }
 
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = diropen(path);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    DIR_ITER *dir = vrt_diropen(path);
+    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting (ftp_NLST)");
 
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
@@ -448,12 +452,13 @@ static s32 ftp_LIST(client_t *client, char *path) {
         path = rest;
     }
     if (!*path) {
-        path = ".";
+        path = client->cwd;
     }
 
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = diropen(path);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    DIR_ITER *dir = vrt_diropen(path);
+    printf("LIST: %s\n",path);
+    if (exit_cwd_context(client)) { sleep(10); die("FATAL: Could not exit cwd context, exiting (ftp_LIST)");}
 
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
@@ -467,14 +472,14 @@ static s32 ftp_LIST(client_t *client, char *path) {
             result = write_reply(client, 226, "Closing data connection, transfer successful.");
         }
     }
-    dirclose(dir);
+    vrt_dirclose(dir);
     return result;
 }
 
 static s32 ftp_RETR(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "rb");
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    FILE *f = vrt_fopen(path, "rb");
+    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting (ftp_RETR)");
 
     if (!f) {
         return write_reply(client, 550, strerror(errno));
@@ -482,7 +487,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     
     if (client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
         s32 fseek_error = errno;
-        fclose(f);
+        vrt_fclose(f);
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(fseek_error));
     }
@@ -497,7 +502,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
             result = write_reply(client, 226, "Closing data connection, transfer successful.");
         }
     }
-    fclose(f);
+    vrt_fclose(f);
     return result;
 }
 
@@ -520,12 +525,12 @@ static s32 stor_or_append(client_t *client, FILE *f) {
 
 static s32 ftp_STOR(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "wb");
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    FILE *f = vrt_fopen(path, "wb");
+    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting (ftp_STOR)");
     
     if (f && client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
         s32 fseek_error = errno;
-        fclose(f);
+        vrt_fclose(f);
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(fseek_error));
     }
@@ -536,8 +541,8 @@ static s32 ftp_STOR(client_t *client, char *path) {
 
 static s32 ftp_APPE(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "ab");
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
+    FILE *f = vrt_fopen(path, "ab");
+    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting (ftp_APPE)");
 
     return stor_or_append(client, f);
 }
@@ -730,8 +735,9 @@ int main(int argc, char **argv) {
     initialise_video();
     printf("\x1b[2;0H");
     initialise_fat();
-    if (chdir("/")) die("Could not change to root directory, exiting");
+    if (vrt_chdir("/")) die("Could not change to root directory, exiting");
     WPAD_Init();
+    vrt_Init();
     if (initialise_reset_button()) {
         printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     } else {
