@@ -34,6 +34,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
+#include "vroot.h"
 #include "common.h"
 
 #define NET_BUFFER_SIZE 1024
@@ -43,16 +44,16 @@ const char *CRLF = "\r\n";
 const u32 CRLF_LENGTH = 2;
 
 static bool can_open_root_fs() {
-    DIR_ITER *root = diropen("/");
-    if (root) dirclose(root);
+    DIR_ITER *root = vrt_diropen("/");
+    if (root) vrt_dirclose(root);
     return (bool)root;
 }
 
 void initialise_fat() {
-    if (!fatInit(8192, true)) die("Unable to initialise FAT subsystem, exiting");
+    if (!fatInit(8192, false)) die("Unable to initialise FAT subsystem, exiting");
     // try to open root filesystem - if we don't check here, mkdir crashes later
     if (!can_open_root_fs()) die("Unable to open root filesystem, exiting");
-    if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
+    //if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
 }
 
 static volatile u8 reset = 0;
@@ -111,7 +112,7 @@ static void *run_mount_handle_thread(void *arg) {
         if (wpad & WPAD_BUTTON_1) {
             remount(PI_INTERNAL_SD, "internal SD");
         } else if (wpad & WPAD_BUTTON_2) {
-            remount(PI_USBSTORAGE, "USB storage");
+            //remount(PI_USBSTORAGE, "USB storage");
         }
 
         sleep(1);
