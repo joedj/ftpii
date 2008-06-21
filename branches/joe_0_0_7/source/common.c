@@ -85,7 +85,7 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
     } else {
         printf("done\n");
     }
-    printf("To continue after changing the %s press 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
+    printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
     int timer = 30;
     do {
         sleep(1);
