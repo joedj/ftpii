@@ -661,6 +661,14 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
     return write_reply(client, 350, msg);
 }
 
+static s32 ftp_SITE(client_t *client, char *rest) {
+    if (!strcasecmp("LOADER", rest)) {
+        write_reply(client, 200, "Exiting to loader.");
+        die("KTHXBYE");
+    }
+    return write_reply(client, 501, "Unknown SITE command.");
+}
+
 static s32 ftp_NOOP(client_t *client, char *rest) {
     return write_reply(client, 200, "NOOP command successful.");
 }
@@ -709,6 +717,7 @@ static s32 process_command(client_t *client, char *cmd_line) {
     else if (!strcasecmp("PASS", cmd)) handler = ftp_PASS;
     else if (!strcasecmp("QUIT", cmd)) handler = ftp_QUIT;
     else if (!strcasecmp("REIN", cmd)) handler = ftp_REIN;
+    else if (!strcasecmp("SITE", cmd)) handler = ftp_SITE;
     else if (!strcasecmp("ALLO", cmd)) handler = ftp_SUPERFLUOUS;
     else if (!strcasecmp("SITE", cmd)) handler = ftp_SUPERFLUOUS;
     else if (!strcasecmp("NOOP", cmd)) handler = ftp_NOOP;
