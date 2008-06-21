@@ -32,8 +32,8 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <string.h>
 #include <sys/dir.h>
-#include <wiiuse/wpad.h>
 #include <unistd.h>
+#include <wiiuse/wpad.h>
 
 #include "common.h"
 
@@ -68,7 +68,7 @@ static mutex_t chdir_mutex;
 /* for "debugging" */
 // void wait_for_continue(char *msg) {
 //     printf(msg);
-//     printf("...press B\n\n");
+//     printf("...hold B\n\n");
 //     sleep(1);
 //     while (!(WPAD_ButtonsHeld(0) & WPAD_BUTTON_B)) {
 //         WPAD_ScanPads();
@@ -229,13 +229,6 @@ static s32 exit_cwd_context(client_t *client) {
     return !result;
 }
 
-static void close_passive_socket(client_t *client) {
-    if (client->passive_socket >= 0) {
-        net_close(client->passive_socket);
-        client->passive_socket = -1;
-    }
-}
-
 typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 
 s32 simple_cwd_context_handler(client_t *client, ftp_command_handler handler, char *rest) {
@@ -243,6 +236,13 @@ s32 simple_cwd_context_handler(client_t *client, ftp_command_handler handler, ch
     s32 result = handler(client, rest);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
     return result;
+}
+
+static void close_passive_socket(client_t *client) {
+    if (client->passive_socket >= 0) {
+        net_close(client->passive_socket);
+        client->passive_socket = -1;
+    }
 }
 
 static s32 ftp_USER(client_t *client, char *username) {
@@ -497,10 +497,19 @@ static s32 do_data_connection_passive(client_t *client, data_connection_callback
     return result;
 }
 
-static s32 do_data_connection(client_t *client, data_connection_callback callback, void *arg) {
-    data_connection_handler handler = do_data_connection_active;
-    if (client->passive_socket >= 0) handler = do_data_connection_passive;
-    return handler(client, callback, arg);
+static s32 do_data_connection(client_t *client, void *callback, void *arg) {
+    s32 result = write_reply(client, 150, "Transferring data.");
+    if (result >= 0) {
+        data_connection_handler handler = do_data_connection_active;
+        if (client->passive_socket >= 0) handler = do_data_connection_passive;
+        result = handler(client, (data_connection_callback)callback, arg);
+        if (result < 0) {
+            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
+        } else {
+            result = write_reply(client, 226, "Closing data connection, transfer successful.");
+        }
+    }
+    return result;
 }
 
 static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
@@ -547,15 +556,9 @@ static s32 ftp_NLST(client_t *client, char *path) {
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = write_reply(client, 120, "Writing data.");
-    if (result >= 0) {
-        result = do_data_connection(client, (data_connection_callback)send_nlst, dir);
-        if (result < 0) {
-            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
-        } else {
-            result = write_reply(client, 226, "Closing data connection, transfer successful.");
-        }
-    }
+
+    s32 result = do_data_connection(client, send_nlst, dir);
+
     dirclose(dir);
     return result;
 }
@@ -582,15 +585,9 @@ static s32 ftp_LIST(client_t *client, char *path) {
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = write_reply(client, 120, "Writing data.");
-    if (result >= 0) {
-        result = do_data_connection(client, (data_connection_callback)send_list, dir);
-        if (result < 0) {
-            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
-        } else {
-            result = write_reply(client, 226, "Closing data connection, transfer successful.");
-        }
-    }
+
+    s32 result = do_data_connection(client, send_list, dir);
+
     dirclose(dir);
     return result;
 }
@@ -612,15 +609,8 @@ static s32 ftp_RETR(client_t *client, char *path) {
     }
     client->restart_marker = 0;
     
-    s32 result = write_reply(client, 150, "File status okay; transferring data.");
-    if (result >= 0) {
-        result = do_data_connection(client, (data_connection_callback)write_from_file, f);
-        if (result < 0) {
-            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
-        } else {
-            result = write_reply(client, 226, "Closing data connection, transfer successful.");
-        }
-    }
+    s32 result = do_data_connection(client, write_from_file, f);
+
     fclose(f);
     return result;
 }
@@ -629,15 +619,9 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = write_reply(client, 150, "File status okay; reading data.");
-    if (result >= 0) {
-        result = do_data_connection(client, (data_connection_callback)read_to_file, f);
-        if (result < 0) {
-            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
-        } else {
-            result = write_reply(client, 226, "Closing data connection, transfer successful.");
-        }
-    }
+
+    s32 result = do_data_connection(client, read_to_file, f);
+
     fclose(f);
     return result;
 }
@@ -804,11 +788,12 @@ static void *process_connection(void *client_ptr) {
     close_passive_socket(client);
     free(client);
 
+    printf("Done doing stuffs!\n");
+
     mutex_acquire(global_mutex);
     num_clients--;
     mutex_release(global_mutex);
 
-    printf("Done doing stuffs!\n");
     return NULL;
 }
 
@@ -819,10 +804,7 @@ static void mainloop() {
         struct sockaddr_in client_address;
         s32 peer = accept_peer(server, &client_address);
 
-        mutex_acquire(global_mutex);
-
         if (num_clients == MAX_CLIENTS) {
-            mutex_release(global_mutex);
             printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
             net_close(peer);
             continue;
@@ -830,7 +812,6 @@ static void mainloop() {
 
         client_t *client = malloc(sizeof(client_t));
         if (!client) {
-            mutex_release(global_mutex);
             printf("Could not allocate memory for client state, not accepting client.\n");
             net_close(peer);
             continue;
@@ -849,10 +830,10 @@ static void mainloop() {
             net_close(peer);
             free(client);
         } else {
+            mutex_acquire(global_mutex);
             num_clients++;
+            mutex_release(global_mutex);
         }
-        
-        mutex_release(global_mutex);
     }
 }
 
@@ -867,8 +848,8 @@ int main(int argc, char **argv) {
         printf("Unable to start reset thread - hold down the power button to exit.\n");
     }
     if (initialise_mount_buttons()) {
-        printf("To remount internal SD, press 1 on WiiMote #1.\n");
-        printf("To remount USB storage, press 2 on WiiMote #1.\n");
+        printf("To remount internal SD, hold 1 on WiiMote #1.\n");
+        printf("To remount USB storage, hold 2 on WiiMote #1.\n");
     } else {
         printf("Unable to start mount thread - no remounting while running!\n");
     }

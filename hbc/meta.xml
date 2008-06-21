@@ -10,6 +10,6 @@ WiiSD: fat3:/
 USB:   fat4:/
 
 To exit, hold A on WiiMote #1 or press the reset button.
-To remount internal SD, press 1 on WiiMote #1.
-To remount USB storage, press 2 on WiiMote #1.</long_description> 
+To remount internal SD, hold 1 on WiiMote #1.
+To remount USB storage, hold 2 on WiiMote #1.</long_description> 
 </app>
