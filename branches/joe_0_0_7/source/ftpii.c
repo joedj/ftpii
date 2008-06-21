@@ -24,9 +24,11 @@ misrepresented as being the original software.
 
 */
 #include <errno.h>
+#include <fat.h>
 #include <malloc.h>
 #include <network.h>
 #include <ogcsys.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/dir.h>
@@ -43,6 +45,7 @@ static const u16 SRC_PORT = 20;
 static const u16 PORT = 21;
 static const s32 EQUIT = 696969;
 static const u8 MAX_CLIENTS = 5;
+static const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
 
 struct client_struct {
     s32 socket;
@@ -86,6 +89,124 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
 }
 
 /*
+    Converts a client-visible path to a real path
+    E.g. "/sd/foo" -> "fat3:/foo"
+         "/sd"     -> "fat3:/"
+    The resulting path will fit in an array of size MAXPATHLEN
+    Returns NULL to indicate that the client-visible path is invalid
+*/
+static char *to_real_path(char *virtual_path) {
+    if (strchr(virtual_path, ':')) {
+        // TODO: set ENOENT error
+        return NULL; // colon is not allowed in client path, i've decided =P
+    }
+
+    // TODO: normalise path...
+
+    char prefix[7] = { '\0' };
+    u32 i;
+    for (i = 0; i < (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char*)); i++) {
+        const char *alias = VIRTUAL_PARTITION_ALIASES[i];
+        size_t alias_len = strlen(alias);
+        if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
+            sprintf(prefix, "fat%i:/", i + 1);
+            virtual_path += alias_len;
+            if (*virtual_path == '/') virtual_path++;
+            break;
+        }
+    }
+    if (!*prefix) {
+        // virtual_path did not begin with a virtual partition alias
+        // XXX: virtual_path here is relative, vrt-root or invalid
+        if (strcmp("/", virtual_path) == 0) return NULL; // TODO: indicate virtual-root...
+        else if (strncmp("/", virtual_path, 1) == 0) {
+            // virtual_path begins with / but not /sd or /usb, and isn't vfs-root
+            return NULL; // TODO: set ENODEV error
+        }
+    }
+    
+    size_t real_path_size = strlen(prefix) + strlen(virtual_path) + 1;
+    if (real_path_size > MAXPATHLEN) {
+        // TODO: set ENOENT error
+        return NULL;
+    }
+
+    char *path = malloc(real_path_size);
+    if (!path) {
+        die("FATAL: Unable to allocate memory for real path, exiting");
+    }
+    strcpy(path, prefix);
+    strcat(path, virtual_path);
+
+    return path;
+}
+
+/*
+    Converts a real absolute path to a client-visible path
+    E.g. "fat3:/foo" -> "/sd/foo"
+    The resulting path will fit into an array of size MAXPATHLEN
+    For this reason, a virtual prefix (e.g. "/sd" or "/usb" cannot be longer than "fatX:", i.e. 5 characters)
+    This function will not fail.  If it cannot complete successfully, the program will terminate with an error message.
+*/
+static char *to_virtual_path(char *real_path) {
+    const char *alias = NULL;
+    u32 i;
+    for (i = 0; i < (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char*)); i++) {
+        if (!strncasecmp("fat", real_path, 3) && real_path[3] == ('1' + i) && real_path[4] == ':') {
+            alias = VIRTUAL_PARTITION_ALIASES[i];
+            real_path += 5;
+        }
+    }
+    if (!alias) {
+        die("FATAL: BUG: Unable to convert real path to client-visible path, exiting");
+    }
+    
+    size_t virtual_path_size = strlen(alias) + strlen(real_path) + 1;
+    if (virtual_path_size > MAXPATHLEN) {
+        die("FATAL: BUG: Client-visible representation of real path is longer than MAXPATHLEN, exiting");
+    }
+
+    char *path = malloc(virtual_path_size);
+    if (!path) {
+        die("FATAL: Unable to allocate memory for client-visible path, exiting");
+    }
+    strcpy(path, alias);
+    strcat(path, real_path);
+    return path;
+}
+
+typedef void * (*path_func)(char *path, ...);
+
+static void *with_virtual_path(void *void_f, char *virtual_path, s32 failed, ...) {
+    char *path = to_real_path(virtual_path);
+    if (!path) return (void *)failed;
+    
+    path_func f = (path_func)void_f;
+    va_list ap;
+    void *args[3];
+    unsigned int num_args = 0;
+    va_start(ap, failed);
+    do {
+        void *arg = va_arg(ap, void *);
+        if (!arg) break;
+        args[num_args++] = arg;
+    } while (1);
+    va_end(ap);
+    
+    void *result;
+    switch (num_args) {
+        case 0: result = f(path); break;
+        case 1: result = f(path, args[0]); break;
+        case 2: result = f(path, args[0], args[1]); break;
+        case 3: result = f(path, args[0], args[1], args[2]); break;
+        default: result = (void *)failed;
+    }
+    
+    free(path);
+    return result;
+}
+
+/*
     Returns 0 on success
     On failure, the mutex is unlocked
 */
@@ -103,11 +224,9 @@ static s32 enter_cwd_context(client_t *client) {
     before it is allowed to call this function.
 */
 static s32 exit_cwd_context(client_t *client) {
-    s32 getcwd_result = getcwd(client->cwd, MAXPATHLEN) ? 0 : -1;
-    s32 result = chdir("/");
+    char *result = getcwd(client->cwd, MAXPATHLEN);
     mutex_release(chdir_mutex);
-    if (!result) result = getcwd_result;
-    return result;
+    return !result;
 }
 
 static void close_passive_socket(client_t *client) {
@@ -136,8 +255,7 @@ static s32 ftp_PASS(client_t *client, char *password) {
 
 static s32 ftp_REIN(client_t *client, char *rest) {
     close_passive_socket(client);
-    client->cwd[0] = '/';
-    client->cwd[1] = '\0';
+    strcpy(client->cwd, "fat3:/"); // TODO: VFS: client should start in vfs-root
     client->representation_type = 'A';
     return write_reply(client, 220, "Service ready for new user.");
 }
@@ -180,19 +298,16 @@ static s32 ftp_MODE(client_t *client, char *rest) {
 static s32 ftp_PWD(client_t *client, char *rest) {
     char msg[MAXPATHLEN + 24];
     // TODO: escape double-quotes
-    // XXX: for now, strip "fat:" from all paths we send to the client, because it screws with some FTP clients (e.g. FileZilla)
-    char *stripped_path = client->cwd;
-    if (strncmp(stripped_path, "fat:", 4) == 0) stripped_path += 4;
-    sprintf(msg, "\"%s\" is current directory.", stripped_path);
+    // TODO: handle case where we're in vfs-root
+    char *path = to_virtual_path(client->cwd);
+    sprintf(msg, "\"%s\" is current directory.", path);
+    free(path);
     return write_reply(client, 257, msg);
 }
 
 static s32 ftp_CWD(client_t *client, char *path) {
-    struct stat st;
-    if (stat(path, &st)) { // have to check this because if we give chdir bad input (e.g. "/fat:/SNES9X/") it can cause a crash
-        return write_reply(client, 550, strerror(errno));
-    }
-    if (!chdir(path)) {
+    // TODO: VFS: handle case where we should be changing to vfs-root
+    if (!with_virtual_path(chdir, path, -1, NULL)) {
         return write_reply(client, 250, "CWD command successful.");
     } else  {
         return write_reply(client, 550, strerror(errno));
@@ -200,6 +315,7 @@ static s32 ftp_CWD(client_t *client, char *path) {
 }
 
 static s32 ftp_CDUP(client_t *client, char *rest) {
+    // TODO: VFS: set client cwd to vfs-root if we're in real-root
     if (!chdir("..")) {
         return write_reply(client, 250, "CDUP command successful.");
     } else  {
@@ -208,7 +324,7 @@ static s32 ftp_CDUP(client_t *client, char *rest) {
 }
 
 static s32 ftp_DELE(client_t *client, char *path) {
-    if (!unlink(path)) {
+    if (!with_virtual_path(unlink, path, -1, NULL)) {
         return write_reply(client, 250, "File or directory removed.");
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -219,7 +335,7 @@ static s32 ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters or arguments.");
     }
-    if (!mkdir(path, 0777)) {
+    if (!with_virtual_path(mkdir, path, -1, 0777, NULL)) {
         // TODO: error-handling =P
         char new_path[MAXPATHLEN];
         chdir(path);
@@ -227,10 +343,9 @@ static s32 ftp_MKD(client_t *client, char *path) {
         chdir(client->cwd);
         char msg[MAXPATHLEN + 21];
         // TODO: escape double-quotes
-        // XXX: for now, strip "fat:" from all paths we send to the client, because it screws with some FTP clients (e.g. FileZilla)
-        char *stripped_path = new_path;
-        if (strncmp(stripped_path, "fat:", 4) == 0) stripped_path += 4;
-        sprintf(msg, "\"%s\" directory created.", stripped_path);
+        char *virtual_path = to_virtual_path(new_path);
+        sprintf(msg, "\"%s\" directory created.", virtual_path);
+        free(virtual_path);
         return write_reply(client, 257, msg);
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -247,10 +362,14 @@ static s32 ftp_RNTO(client_t *client, char *path) {
         return write_reply(client, 503, "RNFR required first.");
     }
     s32 result;
-    if (rename(client->pending_rename, path)) {
-        result = write_reply(client, 550, strerror(errno));
-    } else {
+    char *real_path = to_real_path(path);
+    if (real_path && !with_virtual_path(rename, client->pending_rename, -1, real_path, NULL)) {
         result = write_reply(client, 250, "Rename successful.");
+    } else {
+        result = write_reply(client, 550, strerror(errno));
+    }
+    if (real_path) {
+        free(real_path);
     }
     *client->pending_rename = '\0';
     return result;
@@ -258,7 +377,8 @@ static s32 ftp_RNTO(client_t *client, char *path) {
 
 static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
-    if (!stat(path, &st)) {
+    // TODO: VFS: handle case with path is vfs-root
+    if (!with_virtual_path(stat, path, -1, &st, NULL)) {
         char size_buf[12];
         sprintf(size_buf, "%li", st.st_size); // XXX: what does this do for files over 2GB?
         return write_reply(client, 213, size_buf);
@@ -418,8 +538,10 @@ static s32 ftp_NLST(client_t *client, char *path) {
         path = ".";
     }
 
+    // TODO: VFS: handle case when path is vfs-root
+
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = diropen(path);
+    DIR_ITER *dir = with_virtual_path(diropen, path, 0, NULL);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
 
     if (dir == NULL) {
@@ -451,8 +573,10 @@ static s32 ftp_LIST(client_t *client, char *path) {
         path = ".";
     }
 
+    // TODO: VFS: handle case when path is vfs-root
+
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = diropen(path);
+    DIR_ITER *dir = with_virtual_path(diropen, path, 0, NULL);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
 
     if (dir == NULL) {
@@ -473,7 +597,7 @@ static s32 ftp_LIST(client_t *client, char *path) {
 
 static s32 ftp_RETR(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "rb");
+    FILE *f = with_virtual_path(fopen, path, 0, "rb", NULL);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
 
     if (!f) {
@@ -488,7 +612,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     }
     client->restart_marker = 0;
     
-    s32 result = write_reply(client, 150, "File status okay; writing data.");
+    s32 result = write_reply(client, 150, "File status okay; transferring data.");
     if (result >= 0) {
         result = do_data_connection(client, (data_connection_callback)write_from_file, f);
         if (result < 0) {
@@ -520,7 +644,7 @@ static s32 stor_or_append(client_t *client, FILE *f) {
 
 static s32 ftp_STOR(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "wb");
+    FILE *f = with_virtual_path(fopen, path, 0, "wb", NULL);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
     
     if (f && client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
@@ -536,7 +660,7 @@ static s32 ftp_STOR(client_t *client, char *path) {
 
 static s32 ftp_APPE(client_t *client, char *path) {
     if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = fopen(path, "ab");
+    FILE *f = with_virtual_path(fopen, path, 0, "ab", NULL);
     if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
 
     return stor_or_append(client, f);
@@ -714,8 +838,7 @@ static void mainloop() {
         client->socket = peer;
         client->representation_type = 'A';
         client->passive_socket = -1;
-        client->cwd[0] = '/';
-        client->cwd[1] = '\0';
+        strcpy(client->cwd, "fat3:/"); // TOOD: VFS: client should start in vfs-root
         *client->pending_rename = '\0';
         client->restart_marker = 0;
         memcpy(&client->address, &client_address, sizeof(client_address));
@@ -737,7 +860,6 @@ int main(int argc, char **argv) {
     initialise_video();
     printf("\x1b[2;0H");
     initialise_fat();
-    if (chdir("/")) die("Could not change to root directory, exiting");
     WPAD_Init();
     if (initialise_reset_button()) {
         printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
