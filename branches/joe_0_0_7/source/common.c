@@ -34,16 +34,7 @@ misrepresented as being the original software.
 #define NET_BUFFER_SIZE 1024
 #define FREAD_BUFFER_SIZE 1024
 
-/* for "debugging" */
-// void wait_for_continue(char *msg) {
-//     printf(msg);
-//     printf("...hold B\n\n");
-//     sleep(1);
-//     while (!(WPAD_ButtonsHeld(0) & WPAD_BUTTON_B)) {
-//         WPAD_ScanPads();
-//         VIDEO_WaitVSync();
-//     }
-// }
+static const u32 CACHE_PAGES = 8192;
 
 void die(char *msg) {
     perror(msg);
@@ -65,16 +56,8 @@ void mutex_release() {
     while (LWP_MutexUnlock(global_mutex));
 }
 
-static bool can_open_root_fs() {
-    DIR_ITER *root = diropen("/");
-    if (root) dirclose(root);
-    return (bool)root;
-}
-
 void initialise_fat() {
-    if (!fatInit(8192, true)) die("Unable to initialise FAT subsystem, exiting");
-    // try to open root filesystem - if we don't check here, mkdir crashes later
-    if (!can_open_root_fs()) die("Unable to open root filesystem, exiting");
+    if (!fatInit(CACHE_PAGES, false)) die("Unable to initialise FAT subsystem, exiting");
     if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
 }
 
@@ -109,16 +92,10 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
 
     WPAD_Flush(0);
 
-    if (!fatMountNormalInterface(partition,8192)) {
-        printf("Error mounting %s\n", deviceName);
-    } else if (!fatSetDefaultInterface(partition)) {
-        printf("Failure: Can't bind %s to default interface\n", deviceName);
-        fatUnmount(partition);
-    } else if(!can_open_root_fs()) {
-        printf("Failure: Can't open root file system\n");
-        fatUnmount(partition);
+    if (!fatMountNormalInterface(partition, CACHE_PAGES)) {
+        printf("Error mounting %s.\n", deviceName);
     } else {
-        printf("Success: %s is mounted\n", deviceName);
+        printf("Success: %s is mounted.\n", deviceName);
     }
 }
 
