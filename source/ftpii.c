@@ -30,15 +30,7 @@ misrepresented as being the original software.
 
 static const u16 PORT = 21;
 
-static void mainloop() {
-    s32 server = create_server(PORT);
-    printf("\nListening on TCP port %u...\n", PORT);
-    while (1) {
-        accept_ftp_client(server);
-    }
-}
-
-int main(int argc, char **argv) {
+static void initialise_ftpii() {
     initialise_video();
     initialise_fat();
     WPAD_Init();
@@ -54,8 +46,14 @@ int main(int argc, char **argv) {
         printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
     }
     initialise_ftp();
-    
-    mainloop();
+}
 
-    return 0;
+int main(int argc, char **argv) {
+    initialise_ftpii();
+
+    s32 server = create_server(PORT);
+    printf("\nListening on TCP port %u...\n", PORT);
+    while (1) {
+        accept_ftp_client(server);
+    }
 }
