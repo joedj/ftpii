@@ -23,10 +23,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <fat.h>
-#include <math.h>
 #include <network.h>
-#include <ogc/lwp_watchdog.h>
-#include <ogcsys.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,13 +31,25 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#include "common.h"
-
 #define NET_BUFFER_SIZE 1024
 #define FREAD_BUFFER_SIZE 1024
 
-const char *CRLF = "\r\n";
-const u32 CRLF_LENGTH = 2;
+/* for "debugging" */
+// void wait_for_continue(char *msg) {
+//     printf(msg);
+//     printf("...hold B\n\n");
+//     sleep(1);
+//     while (!(WPAD_ButtonsHeld(0) & WPAD_BUTTON_B)) {
+//         WPAD_ScanPads();
+//         VIDEO_WaitVSync();
+//     }
+// }
+
+void die(char *msg) {
+    perror(msg);
+    sleep(5);
+    exit(1);
+}
 
 void mutex_acquire(mutex_t m) {
     while (LWP_MutexLock(m));
@@ -137,12 +146,6 @@ u8 initialise_reset_button() {
 u8 initialise_mount_buttons() {
     lwp_t mount_thread;
     return !LWP_CreateThread(&mount_thread, run_mount_handle_thread, NULL, NULL, 0, 80);
-}
-
-void die(char *msg) {
-    perror(msg);
-    sleep(5);
-    exit(1);
 }
 
 static void *xfb = NULL;
