@@ -32,6 +32,7 @@ static const u16 PORT = 21;
 
 static void initialise_ftpii() {
     initialise_video();
+    initialise_global_mutex();
     initialise_fat();
     WPAD_Init();
     if (initialise_reset_button()) {
@@ -45,7 +46,6 @@ static void initialise_ftpii() {
     } else {
         printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
     }
-    initialise_ftp();
 }
 
 int main(int argc, char **argv) {

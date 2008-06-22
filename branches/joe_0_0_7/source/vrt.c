@@ -31,7 +31,7 @@ misrepresented as being the original software.
 #include "common.h"
 
 static const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
-static const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char*));
+static const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 static const u32 VRT_DEVICE_ID = 38744;
 
 /*
@@ -245,8 +245,10 @@ int vrt_chdir(char *cwd, char *path) {
         return 0;
     }
     free(real_path);
+    mutex_acquire();
     int result = (int)with_virtual_path(cwd, chdir, path, -1, NULL);
     if (!result) vrt_getcwd("", cwd, MAXPATHLEN); // TODO: error checking
+    mutex_release();
     return result;
 }
 

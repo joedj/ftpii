@@ -51,12 +51,18 @@ void die(char *msg) {
     exit(1);
 }
 
-void mutex_acquire(mutex_t m) {
-    while (LWP_MutexLock(m));
+static mutex_t global_mutex;
+
+void initialise_global_mutex() {
+    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
 }
 
-void mutex_release(mutex_t m) {
-    while (LWP_MutexUnlock(m));
+void mutex_acquire() {
+    while (LWP_MutexLock(global_mutex));
+}
+
+void mutex_release() {
+    while (LWP_MutexUnlock(global_mutex));
 }
 
 static bool can_open_root_fs() {
