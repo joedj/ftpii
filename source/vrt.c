@@ -220,12 +220,7 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
     return (int)with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
-char *vrt_getcwd(char *cwd, char *buf, size_t size) {
-    if (size < 2) return NULL;
-    if (!strcmp("/", cwd)) {
-        strcpy(buf, "/");
-        return buf;
-    }
+static char *vrt_getcwd(char *buf, size_t size) {
     char real_path[size];
     if (!getcwd(real_path, size)) return NULL;
     char *virtual_path = to_virtual_path(real_path);
@@ -247,7 +242,7 @@ int vrt_chdir(char *cwd, char *path) {
     free(real_path);
     mutex_acquire();
     int result = (int)with_virtual_path(cwd, chdir, path, -1, NULL);
-    if (!result) vrt_getcwd("", cwd, MAXPATHLEN); // TODO: error checking
+    if (!result) vrt_getcwd(cwd, MAXPATHLEN); // TODO: error checking
     mutex_release();
     return result;
 }
