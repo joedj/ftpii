@@ -22,6 +22,7 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <errno.h>
 #include <malloc.h>
 #include <stdarg.h>
 #include <string.h>
@@ -136,8 +137,8 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     Returns NULL to indicate that the client-visible path is invalid
 */
 char *to_real_path(char *virtual_cwd, char *virtual_path) {
+    errno = ENOENT;
     if (strchr(virtual_path, ':')) {
-        // TODO: set ENOENT error
         return NULL; // colon is not allowed in virtual path, i've decided =P
     }
 
@@ -165,10 +166,13 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
             break;
         }
     }
-    if (!*prefix) goto end; // TODO: set ENODEV error
+    if (!*prefix) {
+        errno = ENODEV;
+        goto end;
+    }
     
     size_t real_path_size = strlen(prefix) + strlen(rest) + 1;
-    if (real_path_size > MAXPATHLEN) goto end; // TODO: set ENOENT error
+    if (real_path_size > MAXPATHLEN) goto end;
 
     path = malloc(real_path_size);
     if (!path) goto end;
@@ -216,7 +220,11 @@ FILE *vrt_fopen(char *cwd, char *path, char *mode) {
 }
 
 int vrt_stat(char *cwd, char *path, struct stat *st) {
-    // TODO: VFS: Handle vfs-root
+    if (!strcmp("/", cwd)) {
+        st->st_mode = S_IFDIR;
+        st->st_size = 31337;
+        return 0;
+    }
     return (int)with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
@@ -268,7 +276,7 @@ int vrt_rename(char *cwd, char *from_path, char *to_path) {
  */
 DIR_ITER *vrt_diropen(char *cwd, char *path) {
     char *real_path = to_real_path(cwd, path);
-    if (!real_path) return NULL; // TODO: set ENOENT error
+    if (!real_path) return NULL;
     else if (!*real_path) {
         DIR_ITER *iter = malloc(sizeof(DIR_ITER));
         if (!iter) return NULL;
