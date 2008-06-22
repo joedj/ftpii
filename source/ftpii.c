@@ -88,20 +88,29 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
     return write_exact(client->socket, msgbuf, msglen);
 }
 
+static char *virtual_abspath(char *virtual_path);
+
 /*
-    Converts a client-visible path to a real path
-    E.g. "/sd/foo" -> "fat3:/foo"
-         "/sd"     -> "fat3:/"
+    Converts a client-visible path to a real absolute path
+    E.g. "/sd/foo"    -> "fat3:/foo"
+         "/sd"        -> "fat3:/"
+         "/sd/../usb" -> "fat4:/"
     The resulting path will fit in an array of size MAXPATHLEN
     Returns NULL to indicate that the client-visible path is invalid
 */
 static char *to_real_path(char *virtual_path) {
     if (strchr(virtual_path, ':')) {
         // TODO: set ENOENT error
-        return NULL; // colon is not allowed in client path, i've decided =P
+        return NULL; // colon is not allowed in virtual path, i've decided =P
     }
 
-    // TODO: normalise path...
+    virtual_path = virtual_abspath(virtual_path);
+    if (!virtual_path) return NULL;
+
+    char *path = NULL;
+    char *rest = virtual_path;
+
+    if (strcmp("/", virtual_path) == 0) goto end; // TODO: indicate virtual-root...
 
     char prefix[7] = { '\0' };
     u32 i;
@@ -110,34 +119,23 @@ static char *to_real_path(char *virtual_path) {
         size_t alias_len = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
             sprintf(prefix, "fat%i:/", i + 1);
-            virtual_path += alias_len;
-            if (*virtual_path == '/') virtual_path++;
+            rest += alias_len;
+            if (*rest == '/') rest++;
             break;
         }
     }
-    if (!*prefix) {
-        // virtual_path did not begin with a virtual partition alias
-        // XXX: virtual_path here is relative, vrt-root or invalid
-        if (strcmp("/", virtual_path) == 0) return NULL; // TODO: indicate virtual-root...
-        else if (strncmp("/", virtual_path, 1) == 0) {
-            // virtual_path begins with / but not /sd or /usb, and isn't vfs-root
-            return NULL; // TODO: set ENODEV error
-        }
-    }
+    if (!*prefix) goto end; // TODO: set ENODEV error
     
-    size_t real_path_size = strlen(prefix) + strlen(virtual_path) + 1;
-    if (real_path_size > MAXPATHLEN) {
-        // TODO: set ENOENT error
-        return NULL;
-    }
+    size_t real_path_size = strlen(prefix) + strlen(rest) + 1;
+    if (real_path_size > MAXPATHLEN) goto end; // TODO: set ENOENT error
 
-    char *path = malloc(real_path_size);
-    if (!path) {
-        die("FATAL: Unable to allocate memory for real path, exiting");
-    }
+    path = malloc(real_path_size);
+    if (!path) goto end;
     strcpy(path, prefix);
-    strcat(path, virtual_path);
+    strcat(path, rest);
 
+    end:
+    free(virtual_path);
     return path;
 }
 
@@ -173,6 +171,73 @@ static char *to_virtual_path(char *real_path) {
     strcpy(path, alias);
     strcat(path, real_path);
     return path;
+}
+
+static char *virtual_abspath(char *virtual_path) {
+    char *path;
+    if (virtual_path[0] == '/') {
+        path = virtual_path;
+    } else {
+        // XXX: VFS: BUG: This is broken if client is currently in vfs-root
+        char cwd[MAXPATHLEN];
+        if (!getcwd(cwd, MAXPATHLEN)) return NULL;
+        char *virtual_cwd = to_virtual_path(cwd);
+        size_t path_size = strlen(virtual_cwd) + strlen(virtual_path) + 1;
+        if (path_size > MAXPATHLEN || !(path = malloc(path_size))) {
+            free(virtual_cwd);
+            return NULL;
+        }
+        strcpy(path, virtual_cwd);
+        strcat(path, virtual_path);
+        free(virtual_cwd);
+    }
+    
+    char *normalised_path = malloc(strlen(path) + 1);
+    if (!normalised_path) goto end;
+    *normalised_path = '\0';
+    char *curr_dir = normalised_path;
+
+    u32 state = 0; // 0:start, 1:slash, 2:dot, 3:dotdot
+    char *token = path;
+    while (1) {
+        switch (state) {
+        case 0:
+            if (*token == '/') {
+                state = 1;
+                curr_dir = normalised_path + strlen(normalised_path);
+                strncat(normalised_path, token, 1);
+            }
+            break;
+        case 1:
+            if (*token == '.') state = 2;
+            else if (*token != '/') state = 0;
+            break;
+        case 2:
+            if (*token == '/' || !*token) {
+                state = 1;
+                *(curr_dir + 1) = '\0';
+            } else if (*token == '.') state = 3;
+            else state = 0;
+            break;
+        case 3:
+            if (*token == '/' || !*token) {
+                state = 1;
+                *curr_dir = '\0';
+                char *prev_dir = strrchr(normalised_path, '/');
+                if (prev_dir) curr_dir = prev_dir;
+                else *curr_dir = '/';
+                *(curr_dir + 1) = '\0';
+            } else state = 0;
+            break;
+        }
+        if (!*token) break;
+        if (state == 0 || *token != '/') strncat(normalised_path, token, 1);
+        token++;
+    }
+
+    end:
+    if (path != virtual_path) free(path);
+    return normalised_path;
 }
 
 typedef void * (*path_func)(char *path, ...);
