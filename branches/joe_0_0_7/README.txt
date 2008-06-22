@@ -46,6 +46,7 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
 
 20080622 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
                Added SITE LOADER command to return to loader.
+               Added SITE CLEAR command to clear the console.
 20080617 0.0.6 Incorporated SD-card and USB hot-swapping patch. (thanks srg!)
 20080615 0.0.5 Added support for buggy FTP clients that use "LIST -aL" or similar, at the expense of breaking
                paths that begin with '-'.

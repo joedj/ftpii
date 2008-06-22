@@ -466,6 +466,12 @@ static s32 ftp_SITE(client_t *client, char *rest) {
     if (!strcasecmp("LOADER", rest)) {
         write_reply(client, 200, "Exiting to loader.");
         exit(0);
+    } else if (!strcasecmp("CLEAR", rest)) {
+        s32 result = write_reply(client, 200, "Cleared.");
+        u32 i;
+        for (i = 0; i < 100; i++) printf("\n");
+        printf("\x1b[2;0H");
+        return result;
     }
     return write_reply(client, 501, "Unknown SITE command.");
 }
