@@ -46,6 +46,7 @@ static void initialise_ftpii() {
     } else {
         printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
     }
+    wait_for_network_initialisation();
 }
 
 int main(int argc, char **argv) {
