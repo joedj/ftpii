@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <malloc.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
 #include <unistd.h>
@@ -464,7 +465,7 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
 static s32 ftp_SITE(client_t *client, char *rest) {
     if (!strcasecmp("LOADER", rest)) {
         write_reply(client, 200, "Exiting to loader.");
-        die("KTHXBYE");
+        exit(0);
     }
     return write_reply(client, 501, "Unknown SITE command.");
 }
