@@ -43,8 +43,7 @@ static const u32 CRLF_LENGTH = 2;
 static volatile u8 num_clients = 0;
 static volatile u16 passive_port = 1024;
 
-static mutex_t global_mutex;
-static mutex_t chdir_mutex;
+static mutex_t ftp_mutex;
 
 extern u32 net_gethostip();
 
@@ -72,38 +71,6 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
     return write_exact(client->socket, msgbuf, msglen);
 }
 
-/*
-    Returns 0 on success
-    On failure, the mutex is unlocked
-*/
-static s32 enter_cwd_context(client_t *client) {
-    mutex_acquire(chdir_mutex);
-    s32 result = chdir(client->cwd);
-    if (result) mutex_release(chdir_mutex);
-    return result;
-}
-
-/*
-    Returns 0 on success
-    On failure, the mutex is unlocked but the cwd is left in an unknown state.
-    A thread must own the chdir_mutex (i.e. have previously called enter_cwd_context)
-    before it is allowed to call this function.
-*/
-static s32 exit_cwd_context(client_t *client) {
-    char *result = getcwd(client->cwd, MAXPATHLEN);
-    mutex_release(chdir_mutex);
-    return !result;
-}
-
-typedef s32 (*ftp_command_handler)(client_t *client, char *args);
-
-s32 simple_cwd_context_handler(client_t *client, ftp_command_handler handler, char *rest) {
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    s32 result = handler(client, rest);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-    return result;
-}
-
 static void close_passive_socket(client_t *client) {
     if (client->passive_socket >= 0) {
         net_close(client->passive_socket);
@@ -121,7 +88,7 @@ static s32 ftp_PASS(client_t *client, char *password) {
 
 static s32 ftp_REIN(client_t *client, char *rest) {
     close_passive_socket(client);
-    strcpy(client->cwd, "fat3:/"); // TODO: VFS: client should start in vfs-root
+    strcpy(client->cwd, "/");
     client->representation_type = 'A';
     return write_reply(client, 220, "Service ready for new user.");
 }
@@ -164,33 +131,36 @@ static s32 ftp_MODE(client_t *client, char *rest) {
 static s32 ftp_PWD(client_t *client, char *rest) {
     char msg[MAXPATHLEN + 24];
     // TODO: escape double-quotes
-    // TODO: handle case where we're in vfs-root
-    char *path = to_virtual_path(client->cwd);
-    sprintf(msg, "\"%s\" is current directory.", path);
-    free(path);
+    sprintf(msg, "\"%s\" is current directory.", client->cwd);
     return write_reply(client, 257, msg);
 }
 
 static s32 ftp_CWD(client_t *client, char *path) {
-    // TODO: VFS: handle case where we should be changing to vfs-root
-    if (!with_virtual_path(chdir, path, -1, NULL)) {
-        return write_reply(client, 250, "CWD command successful.");
+    s32 result;
+    mutex_acquire(ftp_mutex);
+    if (!vrt_chdir(client->cwd, path)) {
+        result = write_reply(client, 250, "CWD command successful.");
     } else  {
-        return write_reply(client, 550, strerror(errno));
+        result = write_reply(client, 550, strerror(errno));
     }
+    mutex_release(ftp_mutex);
+    return result;
 }
 
 static s32 ftp_CDUP(client_t *client, char *rest) {
-    // TODO: VFS: set client cwd to vfs-root if we're in real-root
-    if (!chdir("..")) {
-        return write_reply(client, 250, "CDUP command successful.");
+    s32 result;
+    mutex_acquire(ftp_mutex);
+    if (!vrt_chdir(client->cwd, "..")) {
+        result = write_reply(client, 250, "CDUP command successful.");
     } else  {
-        return write_reply(client, 550, strerror(errno));
+        result = write_reply(client, 550, strerror(errno));
     }
+    mutex_release(ftp_mutex);
+    return result;
 }
 
 static s32 ftp_DELE(client_t *client, char *path) {
-    if (!with_virtual_path(unlink, path, -1, NULL)) {
+    if (!vrt_unlink(client->cwd, path)) {
         return write_reply(client, 250, "File or directory removed.");
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -201,17 +171,18 @@ static s32 ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters or arguments.");
     }
-    if (!with_virtual_path(mkdir, path, -1, 0777, NULL)) {
-        // TODO: error-handling =P
-        char new_path[MAXPATHLEN];
-        chdir(path);
-        getcwd(new_path, MAXPATHLEN);
-        chdir(client->cwd);
+    if (!vrt_mkdir(client->cwd, path, 0777)) {
         char msg[MAXPATHLEN + 21];
+        char abspath[MAXPATHLEN];
+        mutex_acquire(ftp_mutex);
+        // TODO: error-handling =P
+        strcpy(abspath, client->cwd);
+        vrt_chdir(client->cwd, path);
+        strcpy(client->cwd, abspath);
+        vrt_getcwd(client->cwd, abspath, MAXPATHLEN);
+        mutex_release(ftp_mutex);
         // TODO: escape double-quotes
-        char *virtual_path = to_virtual_path(new_path);
-        sprintf(msg, "\"%s\" directory created.", virtual_path);
-        free(virtual_path);
+        sprintf(msg, "\"%s\" directory created.", abspath);
         return write_reply(client, 257, msg);
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -228,14 +199,10 @@ static s32 ftp_RNTO(client_t *client, char *path) {
         return write_reply(client, 503, "RNFR required first.");
     }
     s32 result;
-    char *real_path = to_real_path(path);
-    if (real_path && !with_virtual_path(rename, client->pending_rename, -1, real_path, NULL)) {
+    if (!vrt_rename(client->cwd, client->pending_rename, path)) {
         result = write_reply(client, 250, "Rename successful.");
     } else {
         result = write_reply(client, 550, strerror(errno));
-    }
-    if (real_path) {
-        free(real_path);
     }
     *client->pending_rename = '\0';
     return result;
@@ -243,8 +210,7 @@ static s32 ftp_RNTO(client_t *client, char *path) {
 
 static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
-    // TODO: VFS: handle case with path is vfs-root
-    if (!with_virtual_path(stat, path, -1, &st, NULL)) {
+    if (!vrt_stat(client->cwd, path, &st)) {
         char size_buf[12];
         sprintf(size_buf, "%li", st.st_size); // XXX: what does this do for files over 2GB?
         return write_reply(client, 213, size_buf);
@@ -262,9 +228,9 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    mutex_acquire(global_mutex);
+    mutex_acquire(ftp_mutex);
     bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
-    mutex_release(global_mutex);
+    mutex_release(ftp_mutex);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
@@ -382,7 +348,7 @@ static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
     s32 result = 0;
     char filename[MAXPATHLEN + 2];
     struct stat st;
-    while (dirnext(dir, filename, &st) == 0) {
+    while (vrt_dirnext(dir, filename, &st) == 0) {
         size_t end_index = strlen(filename);
         filename[end_index] = CRLF[0];
         filename[end_index + 1] = CRLF[1];
@@ -399,7 +365,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     char filename[MAXPATHLEN];
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
-    while (dirnext(dir, filename, &st) == 0) {
+    while (vrt_dirnext(dir, filename, &st) == 0) {
         sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1900 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
         if ((result = write_exact(data_socket, line, strlen(line))) < 0) {
             break;
@@ -413,19 +379,14 @@ static s32 ftp_NLST(client_t *client, char *path) {
         path = ".";
     }
 
-    // TODO: VFS: handle case when path is vfs-root
-
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = with_virtual_path(diropen, path, 0, NULL);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-
+    DIR_ITER *dir = vrt_diropen(client->cwd, path);
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
 
     s32 result = do_data_connection(client, send_nlst, dir);
 
-    dirclose(dir);
+    vrt_dirclose(dir);
     return result;
 }
 
@@ -442,27 +403,19 @@ static s32 ftp_LIST(client_t *client, char *path) {
         path = ".";
     }
 
-    // TODO: VFS: handle case when path is vfs-root
-
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    DIR_ITER *dir = with_virtual_path(diropen, path, 0, NULL);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-
+    DIR_ITER *dir = vrt_diropen(client->cwd, path);
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
 
     s32 result = do_data_connection(client, send_list, dir);
 
-    dirclose(dir);
+    vrt_dirclose(dir);
     return result;
 }
 
 static s32 ftp_RETR(client_t *client, char *path) {
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = with_virtual_path(fopen, path, 0, "rb", NULL);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-
+    FILE *f = vrt_fopen(client->cwd, path, "rb");
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
@@ -485,18 +438,13 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-
     s32 result = do_data_connection(client, read_to_file, f);
-
     fclose(f);
     return result;
 }
 
 static s32 ftp_STOR(client_t *client, char *path) {
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = with_virtual_path(fopen, path, 0, "wb", NULL);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-    
+    FILE *f = vrt_fopen(client->cwd, path, "wb");
     if (f && client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
         s32 fseek_error = errno;
         fclose(f);
@@ -509,11 +457,7 @@ static s32 ftp_STOR(client_t *client, char *path) {
 }
 
 static s32 ftp_APPE(client_t *client, char *path) {
-    if (enter_cwd_context(client)) return write_reply(client, 550, "Could not enter cwd context");
-    FILE *f = with_virtual_path(fopen, path, 0, "ab", NULL);
-    if (exit_cwd_context(client)) die("FATAL: Could not exit cwd context, exiting");
-
-    return stor_or_append(client, f);
+    return stor_or_append(client, vrt_fopen(client->cwd, path, "ab"));
 }
 
 static s32 ftp_REST(client_t *client, char *offset_str) {
@@ -546,6 +490,8 @@ static s32 ftp_SUPERFLUOUS(client_t *client, char *rest) {
 static s32 ftp_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 502, "Command not implemented.");
 }
+
+typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 
 /*
     returns negative to signal an error that requires closing the connection
@@ -587,16 +533,6 @@ static s32 process_command(client_t *client, char *cmd_line) {
     else if (!strcasecmp("ALLO", cmd)) handler = ftp_SUPERFLUOUS;
     else if (!strcasecmp("SITE", cmd)) handler = ftp_SUPERFLUOUS;
     else if (!strcasecmp("NOOP", cmd)) handler = ftp_NOOP;
-
-    if     (handler == ftp_CWD ||
-            handler == ftp_CDUP ||
-            handler == ftp_DELE ||
-            handler == ftp_RNTO ||
-            handler == ftp_MKD ||
-            handler == ftp_SIZE
-    ) {
-        return simple_cwd_context_handler(client, handler, rest);
-    }
 
     return handler(client, rest);
 }
@@ -665,9 +601,9 @@ static void *process_connection(void *client_ptr) {
 
     printf("Done doing stuffs!\n");
 
-    mutex_acquire(global_mutex);
+    mutex_acquire(ftp_mutex);
     num_clients--;
-    mutex_release(global_mutex);
+    mutex_release(ftp_mutex);
 
     return NULL;
 }
@@ -691,7 +627,7 @@ void accept_ftp_client(s32 server) {
     client->socket = peer;
     client->representation_type = 'A';
     client->passive_socket = -1;
-    strcpy(client->cwd, "fat3:/"); // TOOD: VFS: client should start in vfs-root
+    strcpy(client->cwd, "/");
     *client->pending_rename = '\0';
     client->restart_marker = 0;
     memcpy(&client->address, &client_address, sizeof(client_address));
@@ -702,15 +638,13 @@ void accept_ftp_client(s32 server) {
         net_close(peer);
         free(client);
     } else {
-        mutex_acquire(global_mutex);
+        mutex_acquire(ftp_mutex);
         num_clients++;
-        mutex_release(global_mutex);
+        mutex_release(ftp_mutex);
     }
 }
 
 void initialise_ftp() {
     wait_for_network_initialisation();
-    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
-    if (LWP_MutexInit(&chdir_mutex, true)) die("Could not initialise chdir mutex, exiting");
-
+    if (LWP_MutexInit(&ftp_mutex, true)) die("Could not initialise ftp mutex, exiting");
 }
