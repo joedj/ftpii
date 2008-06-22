@@ -26,7 +26,6 @@ misrepresented as being the original software.
 #ifndef _FTP_H_
 #define _FTP_H_
 
-void initialise_ftp();
 void accept_ftp_client(s32 server);
 
 #endif /* _FTP_H_ */

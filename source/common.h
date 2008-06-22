@@ -28,8 +28,9 @@ misrepresented as being the original software.
 #include <ogcsys.h>
 #include <stdio.h>
 
-void mutex_acquire(mutex_t m);
-void mutex_release(mutex_t m);
+void initialise_global_mutex();
+void mutex_acquire();
+void mutex_release();
 
 void initialise_fat();
 

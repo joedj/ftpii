@@ -43,8 +43,6 @@ static const u32 CRLF_LENGTH = 2;
 static volatile u8 num_clients = 0;
 static volatile u16 passive_port = 1024;
 
-static mutex_t ftp_mutex;
-
 extern u32 net_gethostip();
 
 struct client_struct {
@@ -137,25 +135,21 @@ static s32 ftp_PWD(client_t *client, char *rest) {
 
 static s32 ftp_CWD(client_t *client, char *path) {
     s32 result;
-    mutex_acquire(ftp_mutex);
     if (!vrt_chdir(client->cwd, path)) {
         result = write_reply(client, 250, "CWD command successful.");
     } else  {
         result = write_reply(client, 550, strerror(errno));
     }
-    mutex_release(ftp_mutex);
     return result;
 }
 
 static s32 ftp_CDUP(client_t *client, char *rest) {
     s32 result;
-    mutex_acquire(ftp_mutex);
     if (!vrt_chdir(client->cwd, "..")) {
         result = write_reply(client, 250, "CDUP command successful.");
     } else  {
         result = write_reply(client, 550, strerror(errno));
     }
-    mutex_release(ftp_mutex);
     return result;
 }
 
@@ -174,13 +168,9 @@ static s32 ftp_MKD(client_t *client, char *path) {
     if (!vrt_mkdir(client->cwd, path, 0777)) {
         char msg[MAXPATHLEN + 21];
         char abspath[MAXPATHLEN];
-        mutex_acquire(ftp_mutex);
-        // TODO: error-handling =P
         strcpy(abspath, client->cwd);
-        vrt_chdir(client->cwd, path);
+        vrt_chdir(abspath, path);
         strcpy(client->cwd, abspath);
-        vrt_getcwd(client->cwd, abspath, MAXPATHLEN);
-        mutex_release(ftp_mutex);
         // TODO: escape double-quotes
         sprintf(msg, "\"%s\" directory created.", abspath);
         return write_reply(client, 257, msg);
@@ -228,9 +218,9 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    mutex_acquire(ftp_mutex);
+    mutex_acquire();
     bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
-    mutex_release(ftp_mutex);
+    mutex_release();
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
@@ -601,9 +591,9 @@ static void *process_connection(void *client_ptr) {
 
     printf("Done doing stuffs!\n");
 
-    mutex_acquire(ftp_mutex);
+    mutex_acquire();
     num_clients--;
-    mutex_release(ftp_mutex);
+    mutex_release();
 
     return NULL;
 }
@@ -638,13 +628,8 @@ void accept_ftp_client(s32 server) {
         net_close(peer);
         free(client);
     } else {
-        mutex_acquire(ftp_mutex);
+        mutex_acquire();
         num_clients++;
-        mutex_release(ftp_mutex);
+        mutex_release();
     }
-}
-
-void initialise_ftp() {
-    wait_for_network_initialisation();
-    if (LWP_MutexInit(&ftp_mutex, true)) die("Could not initialise ftp mutex, exiting");
 }
