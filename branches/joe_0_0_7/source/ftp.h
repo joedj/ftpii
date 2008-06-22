@@ -1,5 +1,7 @@
 /*
 
+ftpii -- an FTP server for the Wii
+
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
 This software is provided 'as-is', without any express or implied warranty.
@@ -21,40 +23,10 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _COMMON_H_
-#define _COMMON_H_
+#ifndef _FTP_H_
+#define _FTP_H_
 
-#include <network.h>
-#include <ogcsys.h>
-#include <stdio.h>
+void initialise_ftp();
+void accept_ftp_client(s32 server);
 
-void mutex_acquire(mutex_t m);
-void mutex_release(mutex_t m);
-
-void initialise_fat();
-
-u8 initialise_reset_button();
-
-u8 initialise_mount_buttons();
-
-void die(char *msg);
-
-void initialise_video();
-
-void wait_for_network_initialisation();
-
-s32 create_server(u16 port);
-
-s32 accept_peer(s32 server, struct sockaddr_in *addr);
-
-s32 write_exact(s32 s, char *buf, s32 length);
-
-s32 write_from_file(s32 s, FILE *f);
-
-s32 read_exact(s32 s, char *buf, s32 length);
-
-s32 read_to_file(s32 s, FILE *f);
-
-u32 split(char *s, char sep, u32 maxsplit, char *result[]);
-
-#endif /* _COMMON_H_ */
+#endif /* _FTP_H_ */
