@@ -162,6 +162,7 @@ void initialise_video() {
     VIDEO_Flush();
     VIDEO_WaitVSync(); // XXX: do i need this? why? where else?
     if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync(); // XXX: no idea why this is done - came from template.c. do i need to do this every time i call VIDEO_WaitVSync() ??
+    printf("\x1b[2;0H");
 }
 
 static s32 initialise_network() {
