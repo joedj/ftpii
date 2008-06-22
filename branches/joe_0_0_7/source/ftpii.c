@@ -40,7 +40,6 @@ static void mainloop() {
 
 int main(int argc, char **argv) {
     initialise_video();
-    printf("\x1b[2;0H");
     initialise_fat();
     WPAD_Init();
     if (initialise_reset_button()) {
