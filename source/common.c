@@ -23,10 +23,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <fat.h>
-#include <math.h>
 #include <network.h>
-#include <ogc/lwp_watchdog.h>
-#include <ogcsys.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,24 +31,39 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#include "common.h"
-
 #define NET_BUFFER_SIZE 1024
 #define FREAD_BUFFER_SIZE 1024
 
-const char *CRLF = "\r\n";
-const u32 CRLF_LENGTH = 2;
+static const u32 CACHE_PAGES = 8192;
 
-static bool can_open_root_fs() {
-    DIR_ITER *root = diropen("/");
-    if (root) dirclose(root);
-    return (bool)root;
+void die(char *msg) {
+    perror(msg);
+    sleep(5);
+    exit(1);
 }
 
+static mutex_t global_mutex;
+
+void initialise_global_mutex() {
+    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
+}
+
+void mutex_acquire() {
+    while (LWP_MutexLock(global_mutex));
+}
+
+void mutex_release() {
+    while (LWP_MutexUnlock(global_mutex));
+}
+
+static volatile u8 fatInitState = 0;
+
 void initialise_fat() {
-    if (!fatInit(8192, true)) die("Unable to initialise FAT subsystem, exiting");
-    // try to open root filesystem - if we don't check here, mkdir crashes later
-    if (!can_open_root_fs()) die("Unable to open root filesystem, exiting");
+    if (!fatInit(CACHE_PAGES, false)) { 
+        printf("Unable to initialise FAT subsystem, maybe no device is connected!\n"); 
+	return (void) NULL;
+    }
+    fatInitState = 1;
     if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
 }
 
@@ -77,7 +89,7 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
     } else {
         printf("done\n");
     }
-    printf("To continue after changing the %s press 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
+    printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
     int timer = 30;
     do {
         sleep(1);
@@ -85,17 +97,22 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
     } while (timer > 0 && !(WPAD_ButtonsDown(0) & WPAD_BUTTON_1));
 
     WPAD_Flush(0);
+    if(!fatInitState){
+        // Try to initialize fat subsystem
+        if(!fatInit(CACHE_PAGES,true)){
+            printf("Unable to initialise FAT subsystem, unable to mount\n"); 
+        	return (void) NULL;
+        }
+       fatInitState = 1;
+       // unmount to ensure the following steps runs fine
+       fatUnmount(PI_DEFAULT);
+    }
 
-    if (!fatMountNormalInterface(partition,8192)) {
-        printf("Error mounting %s\n", deviceName);
-    } else if (!fatSetDefaultInterface(partition)) {
-        printf("Failure: Can't bind %s to default interface\n", deviceName);
-        fatUnmount(partition);
-    } else if(!can_open_root_fs()) {
-        printf("Failure: Can't open root file system\n");
-        fatUnmount(partition);
+    if (!fatMountNormalInterface(partition, CACHE_PAGES)) {
+        printf("Error mounting %s.\n", deviceName);
     } else {
-        printf("Success: %s is mounted\n", deviceName);
+        printf("Success: %s is mounted.\n", deviceName);
+        if (!fatEnableReadAhead(partition, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
     }
 }
 
@@ -104,14 +121,30 @@ static void *run_mount_handle_thread(void *arg) {
 
         do {
             sleep(1);   
-        } while (!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_1 | WPAD_BUTTON_2)));
-
+        } while (!(WPAD_ButtonsDown(0) & WPAD_BUTTON_1));
+        WPAD_Flush(0);
+        // Choose device to remount
+        printf("\nWhat do you want to remount (Press button on WiiMote #1)?\n\n");
+        printf("            SD GECKO A (Up)\n");
+        printf("                 | \n");
+        printf("Front SD(Left) --+-- USB Storage Device (Right)\n");
+        printf("                 |\n");
+        printf("            SD GECKO B (Down)\n");
+        do {
+           sleep(1);
+        } while(!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN )));
+        
         u32 wpad = WPAD_ButtonsHeld(0);
         WPAD_Flush(0);
-        if (wpad & WPAD_BUTTON_1) {
-            remount(PI_INTERNAL_SD, "internal SD");
-        } else if (wpad & WPAD_BUTTON_2) {
+
+        if (wpad & WPAD_BUTTON_LEFT) {
+            remount(PI_INTERNAL_SD, "Front SD");
+        } else if (wpad & WPAD_BUTTON_RIGHT) {
             remount(PI_USBSTORAGE, "USB storage");
+        } else if (wpad & WPAD_BUTTON_UP) {
+            remount(PI_SDGECKO_A, " SDGECKO in slot A");
+        } else if (wpad & WPAD_BUTTON_DOWN) {
+            remount(PI_SDGECKO_B, " SDGECKO in slot B");
         }
 
         sleep(1);
@@ -131,12 +164,6 @@ u8 initialise_mount_buttons() {
     return !LWP_CreateThread(&mount_thread, run_mount_handle_thread, NULL, NULL, 0, 80);
 }
 
-void die(char *msg) {
-    perror(msg);
-    sleep(5);
-    exit(1);
-}
-
 static void *xfb = NULL;
 static GXRModeObj *rmode = NULL;
 
@@ -151,6 +178,7 @@ void initialise_video() {
     VIDEO_Flush();
     VIDEO_WaitVSync(); // XXX: do i need this? why? where else?
     if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync(); // XXX: no idea why this is done - came from template.c. do i need to do this every time i call VIDEO_WaitVSync() ??
+    printf("\x1b[2;0H");
 }
 
 static s32 initialise_network() {
