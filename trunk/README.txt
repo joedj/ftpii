@@ -1,41 +1,30 @@
-ftpii is an FTP server for the Nintendo Wii built using
-devkitPPC / libogc / libfat.
+ftpii is an FTP server for the Nintendo Wii.
 
 
 *** INSTALLATION ***
 
-
 Copy ftpii/ to /apps on an SD-card and use The Homebrew Channel,
 or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, etc...).
-
-This version appears to work quite nicely in at least the OSX and Windows
-command-line FTP clients, Firefox and Internet Explorer.  With the multi-client
-support in 0.0.3, more FTP clients work (e.g. FileZilla), and OSX Finder works
-to some degree, though still has some issues.   0.0.5 adds support for broken
-FTP clients that use "LIST -aL" or similar, so even more clients should work.
 
 
 *** THANKS ***
 
-
 Thanks to those in EFnet #wiidev for all the help, particularly nilsk123 for his
-persistent beta testing and suggestions, and all those who help make
-devkitPPC / libogc / libfat / The Homebrew Channel the great homebrew/development
-environment that it is.
+persistent beta testing and suggestions, srg for his contributions, and all those
+who help make devkitPPC, libogc, libfat and The Homebrew Channel the great
+homebrew/development environment that it is.
 
 
 *** TODO LIST *** (in no particular order):
 
-
  - read data and control connection at same time
  - multiple data connections for single client (?)
  - ABOR, STAT, HELP, FEAT
- - mem card slots, sd gecko, NAND, dvd (some of these may already work thanks to libfat)
+ - mem card slots, NAND, dvd
+ - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
- - real auth?
+ - real auth
  - SITE LOAD (load a .dol or .elf)
- - SITE LOADER (return to loader)
- - allow server to start without a fat device
  - socket timeouts
  - use SO_REUSEADDR ?
  - async networking
@@ -44,13 +33,23 @@ environment that it is.
 
 *** CONTACT ***
 
+http://code.google.com/p/ftpii/
 
-ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
-Device remounting support by Daniel Ehlers <danielehlers@mindeye.net>
+Contributors:
+  ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
+  Daniel Ehlers <danielehlers@mindeye.net> makes regular source contributions.
 
 
 *** HISTORY ***
 
+For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
+
+20080624 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
+               Added SITE LOADER command to return to loader.
+               Added SITE CLEAR command to clear the console.
+               Support for starting without a device connected (thanks srg!)
+               Support for SD Gecko (though currently disabled in libfat) (thanks srg!)
+               Re-enable read-ahead when remounting (thanks srg!)
 20080617 0.0.6 Incorporated SD-card and USB hot-swapping patch. (thanks srg!)
 20080615 0.0.5 Added support for buggy FTP clients that use "LIST -aL" or similar, at the expense of breaking
                paths that begin with '-'.

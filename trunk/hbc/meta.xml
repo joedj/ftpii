@@ -2,14 +2,10 @@
 <app version="1">
   <name>ftpii</name>
   <coder>joedj, srg</coder>
-  <version>0.0.6</version>
+  <version>0.0.7</version>
   <short_description>An FTP server</short_description> 
   <long_description>ftpii is an FTP server.
 
-WiiSD: fat3:/
-USB:   fat4:/
-
 To exit, hold A on WiiMote #1 or press the reset button.
-To remount internal SD, press 1 on WiiMote #1.
-To remount USB storage, press 2 on WiiMote #1.</long_description> 
+To remount a device, hold 1 on WiiMote #1.</long_description> 
 </app>

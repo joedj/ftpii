@@ -1,6 +1,7 @@
 /*
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
+This work is derived from Daniel Ehlers' <danielehlers@mindeye.net> srg_vrt branch.
 
 This software is provided 'as-is', without any express or implied warranty.
 In no event will the authors be held liable for any damages arising from
@@ -21,47 +22,19 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _COMMON_H_
-#define _COMMON_H_
+#ifndef _VRT_H_
+#define _VRT_H_
 
-#include <fat.h>
-#include <network.h>
-#include <ogcsys.h>
-#include <stdio.h>
+#include <sys/dir.h>
 
-const char *VIRTUAL_PARTITION_ALIASES[4];
-const u32 MAX_VIRTUAL_PARTITION_ALIASES;
+FILE *vrt_fopen(char *cwd, char *path, char *mode);
+int vrt_stat(char *cwd, char *path, struct stat *st);
+int vrt_chdir(char *cwd, char *path);
+int vrt_unlink(char *cwd, char *path);
+int vrt_mkdir(char *cwd, char *path, mode_t mode);
+int vrt_rename(char *cwd, char *from_path, char *to_path);
+DIR_ITER *vrt_diropen(char *cwd, char *path);
+int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st);
+int vrt_dirclose(DIR_ITER *iter);
 
-void initialise_global_mutex();
-void mutex_acquire();
-void mutex_release();
-
-void initialise_fat();
-
-bool mounted(PARTITION_INTERFACE partition);
-
-u8 initialise_reset_button();
-
-u8 initialise_mount_buttons();
-
-void die(char *msg);
-
-void initialise_video();
-
-void wait_for_network_initialisation();
-
-s32 create_server(u16 port);
-
-s32 accept_peer(s32 server, struct sockaddr_in *addr);
-
-s32 write_exact(s32 s, char *buf, s32 length);
-
-s32 write_from_file(s32 s, FILE *f);
-
-s32 read_exact(s32 s, char *buf, s32 length);
-
-s32 read_to_file(s32 s, FILE *f);
-
-u32 split(char *s, char sep, u32 maxsplit, char *result[]);
-
-#endif /* _COMMON_H_ */
+#endif /* _VRT_H_ */
