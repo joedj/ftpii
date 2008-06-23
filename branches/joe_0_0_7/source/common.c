@@ -34,15 +34,20 @@ misrepresented as being the original software.
 #define NET_BUFFER_SIZE 1024
 #define FREAD_BUFFER_SIZE 1024
 
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
+const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
+
 static const u32 CACHE_PAGES = 8192;
+
+static mutex_t global_mutex;
+
+static volatile bool fatInitState = false;
 
 void die(char *msg) {
     perror(msg);
     sleep(5);
     exit(1);
 }
-
-static mutex_t global_mutex;
 
 void initialise_global_mutex() {
     if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
@@ -56,9 +61,37 @@ void mutex_release() {
     while (LWP_MutexUnlock(global_mutex));
 }
 
-void initialise_fat() {
-    if (!fatInit(CACHE_PAGES, false)) die("Unable to initialise FAT subsystem, exiting");
-    if (!fatEnableReadAhead(PI_DEFAULT, 64, 128)) printf("Unable to enable FAT read-ahead caching, speed will suffer...\n");
+bool mounted(PARTITION_INTERFACE partition) {
+    char prefix[] = "fatX:/";
+    prefix[3] = partition + '0';
+    DIR_ITER *dir = diropen(prefix);
+    if (dir) {
+        dirclose(dir);
+        return true;
+    }
+    return false;
+}
+
+static void fat_enable_readahead(PARTITION_INTERFACE partition) {
+    if (!fatEnableReadAhead(partition, 64, 128))
+        printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", VIRTUAL_PARTITION_ALIASES[partition - 1]);
+}
+
+static void fat_enable_readahead_all() {
+    PARTITION_INTERFACE i;
+    for (i = 1; i <= MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (mounted(i)) fat_enable_readahead(i);
+    }
+}
+
+bool initialise_fat() {
+    if (!fatInitState && !fatInit(CACHE_PAGES, false)) { 
+        printf("Unable to initialise FAT subsystem.  Are there any connected devices?\n"); 
+    } else {
+        fatInitState = 1;
+        fat_enable_readahead_all();
+    }
+    return fatInitState;
 }
 
 static volatile u8 reset = 0;
@@ -83,39 +116,66 @@ static void remount(PARTITION_INTERFACE partition, char *deviceName) {
     } else {
         printf("done\n");
     }
+
     printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
     int timer = 30;
     do {
         sleep(1);
         timer--;
     } while (timer > 0 && !(WPAD_ButtonsDown(0) & WPAD_BUTTON_1));
-
     WPAD_Flush(0);
 
-    if (!fatMountNormalInterface(partition, CACHE_PAGES)) {
-        printf("Error mounting %s.\n", deviceName);
-    } else {
+    bool success = false;
+    if (!fatInitState) {
+        if (!initialise_fat()) {
+            printf("Unable to initialise FAT subsystem, unable to mount %s\n", deviceName);
+            return;
+        }
+        if (mounted(partition)) success = true;
+    } else if (fatMountNormalInterface(partition, CACHE_PAGES)) {
+        success = true;
+        fat_enable_readahead(partition);
+    }
+
+    if (success) {
         printf("Success: %s is mounted.\n", deviceName);
+    } else {
+        printf("Error mounting %s.\n", deviceName);
     }
 }
 
 static void *run_mount_handle_thread(void *arg) {
     while (true) {
 
-        do {
+        while (!(WPAD_ButtonsDown(0) & WPAD_BUTTON_1)) {
             sleep(1);   
-        } while (!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_1 | WPAD_BUTTON_2)));
+        }
+        WPAD_Flush(0);
 
+        printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
+        printf("             SD Gecko A (Up)\n");
+        printf("                  | \n");
+        printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
+        printf("                  |\n");
+        printf("             SD Gecko B (Down)\n");
+
+        while (!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN))) {
+            sleep(1);
+        }
         u32 wpad = WPAD_ButtonsHeld(0);
         WPAD_Flush(0);
-        if (wpad & WPAD_BUTTON_1) {
-            remount(PI_INTERNAL_SD, "internal SD");
-        } else if (wpad & WPAD_BUTTON_2) {
+
+        if (wpad & WPAD_BUTTON_LEFT) {
+            remount(PI_INTERNAL_SD, "Front SD");
+        } else if (wpad & WPAD_BUTTON_RIGHT) {
             remount(PI_USBSTORAGE, "USB storage");
+        } else if (wpad & WPAD_BUTTON_UP) {
+            remount(PI_SDGECKO_A, "SD Gecko in slot A");
+        } else if (wpad & WPAD_BUTTON_DOWN) {
+            remount(PI_SDGECKO_B, "SD Gecko in slot B");
         }
-
+        
         sleep(1);
-
     }
 }
 
