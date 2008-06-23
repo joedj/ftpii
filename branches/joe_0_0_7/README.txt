@@ -20,11 +20,11 @@ homebrew/development environment that it is.
  - read data and control connection at same time
  - multiple data connections for single client (?)
  - ABOR, STAT, HELP, FEAT
- - mem card slots, sd gecko, NAND, dvd (some of these may already/soon work thanks to libfat)
+ - mem card slots, NAND, dvd
+ - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
  - real auth
  - SITE LOAD (load a .dol or .elf)
- - allow server to start without a fat device
  - socket timeouts
  - use SO_REUSEADDR ?
  - async networking
