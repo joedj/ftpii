@@ -31,8 +31,6 @@ misrepresented as being the original software.
 
 #include "common.h"
 
-static const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
-static const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 static const u32 VRT_DEVICE_ID = 38744;
 
 /*
@@ -294,11 +292,7 @@ DIR_ITER *vrt_diropen(char *cwd, char *path) {
 int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st) {
     if (iter->device == VRT_DEVICE_ID) {
         for (; (int)iter->dirStruct < MAX_VIRTUAL_PARTITION_ALIASES; iter->dirStruct++) {
-            char prefix[7];
-            sprintf(prefix, "fat%i:/", (int)iter->dirStruct + 1);
-            DIR_ITER *prefix_iter = diropen(prefix);
-            if (prefix_iter) {
-                dirclose(prefix_iter);
+            if (mounted((int)iter->dirStruct + 1)) {
                 st->st_mode = S_IFDIR;
                 st->st_size = 0;
                 strcpy(filename, VIRTUAL_PARTITION_ALIASES[(int)iter->dirStruct] + 1);

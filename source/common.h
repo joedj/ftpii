@@ -24,15 +24,21 @@ misrepresented as being the original software.
 #ifndef _COMMON_H_
 #define _COMMON_H_
 
+#include <fat.h>
 #include <network.h>
 #include <ogcsys.h>
 #include <stdio.h>
+
+const char *VIRTUAL_PARTITION_ALIASES[4];
+const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 void initialise_global_mutex();
 void mutex_acquire();
 void mutex_release();
 
 void initialise_fat();
+
+bool mounted(PARTITION_INTERFACE partition);
 
 u8 initialise_reset_button();
 

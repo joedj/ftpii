@@ -35,18 +35,21 @@ homebrew/development environment that it is.
 
 http://code.google.com/p/ftpii/
 
-ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
-Device remounting support by Daniel Ehlers <danielehlers@mindeye.net>
-Virtual path support derived from Daniel Ehlers' srg_vrt branch
+Contributors:
+  ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
+  Daniel Ehlers <danielehlers@mindeye.net> makes regular source contributions.
 
 
 *** HISTORY ***
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20080622 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
+20080624 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
                Added SITE LOADER command to return to loader.
                Added SITE CLEAR command to clear the console.
+               Support for starting without a device connected (thanks srg!)
+               Support for SD Gecko (though currently disabled in libfat) (thanks srg!)
+               Re-enable read-ahead when remounting (thanks srg!)
 20080617 0.0.6 Incorporated SD-card and USB hot-swapping patch. (thanks srg!)
 20080615 0.0.5 Added support for buggy FTP clients that use "LIST -aL" or similar, at the expense of breaking
                paths that begin with '-'.

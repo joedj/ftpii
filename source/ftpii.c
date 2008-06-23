@@ -41,8 +41,7 @@ static void initialise_ftpii() {
         printf("Unable to start reset thread - hold down the power button to exit.\n");
     }
     if (initialise_mount_buttons()) {
-        printf("To remount internal SD, hold 1 on WiiMote #1.\n");
-        printf("To remount USB storage, hold 2 on WiiMote #1.\n");
+        printf("To remount a device, hold 1 on WiiMote #1.\n");
     } else {
         printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
     }
