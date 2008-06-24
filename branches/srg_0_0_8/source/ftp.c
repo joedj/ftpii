@@ -472,7 +472,12 @@ static s32 ftp_SITE(client_t *client, char *rest) {
         for (i = 0; i < 100; i++) printf("\n");
         printf("\x1b[2;0H");
         return result;
-    }
+    } else if(!strcasecmp("CHMOD", rest)){
+        // This do nothing, because fat file system dosn't support 
+        // real file mode bits
+        s32 result = write_reply(client,253, "Attributes changed okay.");
+        return result;
+    } 
     return write_reply(client, 501, "Unknown SITE command.");
 }
 
