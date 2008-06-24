@@ -6,6 +6,12 @@ ftpii is an FTP server for the Nintendo Wii.
 Copy ftpii/ to /apps on an SD-card and use The Homebrew Channel,
 or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, etc...).
 
+If the normal binary crashes on startup, try again after
+copying boot_nousb.elf over the top of boot.elf
+
+If the normal binary crashes on startup, try again after
+copying boot_nousb.elf over the top of boot.elf
+
 
 *** THANKS ***
 
