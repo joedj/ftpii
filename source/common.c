@@ -34,7 +34,7 @@ misrepresented as being the original software.
 #define NET_BUFFER_SIZE 1024
 #define FREAD_BUFFER_SIZE 1024
 
-const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
@@ -155,7 +155,7 @@ static void *run_mount_handle_thread(void *arg) {
         printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
         printf("             SD Gecko A (Up)\n");
         printf("                  | \n");
-        printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
+        printf("Front SD (Left) --+-- USB Storage Device (Right) (DISABLED)\n");
         printf("                  |\n");
         printf("             SD Gecko B (Down)\n");
 
@@ -167,8 +167,6 @@ static void *run_mount_handle_thread(void *arg) {
 
         if (wpad & WPAD_BUTTON_LEFT) {
             remount(PI_INTERNAL_SD, "Front SD");
-        } else if (wpad & WPAD_BUTTON_RIGHT) {
-            remount(PI_USBSTORAGE, "USB storage");
         } else if (wpad & WPAD_BUTTON_UP) {
             remount(PI_SDGECKO_A, "SD Gecko in slot A");
         } else if (wpad & WPAD_BUTTON_DOWN) {
