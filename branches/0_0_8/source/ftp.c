@@ -471,7 +471,7 @@ static s32 ftp_SITE(client_t *client, char *rest) {
         for (i = 0; i < 100; i++) printf("\n");
         printf("\x1b[2;0H");
         return result;
-    } else if (!strcasecmp("CHMOD", rest)) {  // This is implemented as a no-op to prevent some FTP clients from displaying skip/abort/retry type prompts
+    } else if (!strncasecmp("CHMOD ", rest, 6)) {  // This is implemented as a no-op to prevent some FTP clients from displaying skip/abort/retry type prompts
         return write_reply(client, 250, "SITE CHMOD command ok.");
     } 
     return write_reply(client, 501, "Unknown SITE command.");
