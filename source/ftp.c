@@ -170,8 +170,7 @@ static s32 ftp_MKD(client_t *client, char *path) {
         char msg[MAXPATHLEN + 21];
         char abspath[MAXPATHLEN];
         strcpy(abspath, client->cwd);
-        vrt_chdir(abspath, path);
-        strcpy(client->cwd, abspath);
+        vrt_chdir(abspath, path); // TODO: error checking
         // TODO: escape double-quotes
         sprintf(msg, "\"%s\" directory created.", abspath);
         return write_reply(client, 257, msg);
