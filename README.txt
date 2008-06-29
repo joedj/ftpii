@@ -44,7 +44,8 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20080629 0.0.8 Fixed MKD bug that caused working directory to change to new directory automatically.
+20080629 0.0.8 Added no-op SITE CHMOD command to prevent some FTP from displaying skip/abort/retry type prompts.
+               Fixed MKD bug that caused working directory to change to new directory automatically.
 20080624 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
                Added SITE LOADER command to return to loader.
                Added SITE CLEAR command to clear the console.
