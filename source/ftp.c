@@ -170,8 +170,7 @@ static s32 ftp_MKD(client_t *client, char *path) {
         char msg[MAXPATHLEN + 21];
         char abspath[MAXPATHLEN];
         strcpy(abspath, client->cwd);
-        vrt_chdir(abspath, path);
-        strcpy(client->cwd, abspath);
+        vrt_chdir(abspath, path); // TODO: error checking
         // TODO: escape double-quotes
         sprintf(msg, "\"%s\" directory created.", abspath);
         return write_reply(client, 257, msg);
@@ -472,7 +471,9 @@ static s32 ftp_SITE(client_t *client, char *rest) {
         for (i = 0; i < 100; i++) printf("\n");
         printf("\x1b[2;0H");
         return result;
-    }
+    } else if (!strncasecmp("CHMOD ", rest, 6)) {  // This is implemented as a no-op to prevent some FTP clients from displaying skip/abort/retry type prompts
+        return write_reply(client, 250, "SITE CHMOD command ok.");
+    } 
     return write_reply(client, 501, "Unknown SITE command.");
 }
 
