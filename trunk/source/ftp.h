@@ -27,5 +27,6 @@ misrepresented as being the original software.
 #define _FTP_H_
 
 void accept_ftp_client(s32 server);
+void set_ftp_password(char *new_password);
 
 #endif /* _FTP_H_ */

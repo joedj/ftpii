@@ -64,4 +64,7 @@ s32 read_to_file(s32 s, FILE *f);
 
 u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
+char *dirname(char *path);
+char *basename(char *path);
+
 #endif /* _COMMON_H_ */
