@@ -3,8 +3,11 @@ ftpii is an FTP server for the Nintendo Wii.
 
 *** INSTALLATION ***
 
-Copy ftpii/ to /apps on an SD-card and use The Homebrew Channel,
+Copy ftpii/ to /apps/ on an SD-card and use The Homebrew Channel,
 or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, etc...).
+
+To specify a password via The Homebrew Channel, rename the apps/ftpii directory to apps/ftpii_YourPassword.
+To specify a password via wiiload, pass an argument e.g. wiiload boot.elf YourPassword.
 
 
 *** THANKS ***
@@ -23,7 +26,6 @@ homebrew/development environment that it is.
  - mem card slots, NAND, dvd
  - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
- - real auth
  - SITE LOAD (load a .dol or .elf)
  - socket timeouts
  - use SO_REUSEADDR ?
@@ -44,7 +46,8 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20080629 0.0.8 Added no-op SITE CHMOD command to prevent some FTP from displaying skip/abort/retry type prompts.
+20080705 0.0.9 Added authentication - can specify a password using directory name or wiiload arg.
+20080629 0.0.8 Added no-op SITE CHMOD command to prevent some FTP clients from displaying skip/abort/retry type prompts.
                Fixed MKD bug that caused working directory to change to new directory automatically.
 20080624 0.0.7 Added virtual path support for /sd and /usb. (thanks srg!)
                Added SITE LOADER command to return to loader.
