@@ -368,3 +368,36 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
     }
     return num_results;
 }
+
+/**
+    Returns a copy of path up to the last '/' character,
+    If path does not contain '/', return "".
+    Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
+*/
+char *dirname(char *path) {
+    static char result[MAXPATHLEN];
+    strncpy(result, path, MAXPATHLEN - 1);
+    result[MAXPATHLEN - 1] = '\0';
+    s32 i;
+    for (i = strlen(result) - 1; i >= 0; i--) {
+        if (result[i] == '/') {
+            result[i] = '\0';
+            return result;
+        }
+    }
+    return "";
+}
+
+/**
+    Returns a pointer into path, starting after the right-most '/' character.
+    If path does not contain '/', return path.
+*/
+char *basename(char *path) {
+    s32 i;
+    for (i = strlen(path) - 1; i >= 0; i--) {
+        if (path[i] == '/') {
+            return path + i + 1;
+        }
+    }
+    return path;
+}
