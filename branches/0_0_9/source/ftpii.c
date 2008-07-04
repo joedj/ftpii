@@ -23,12 +23,14 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <string.h>
 #include <wiiuse/wpad.h>
 
 #include "common.h"
 #include "ftp.h"
 
 static const u16 PORT = 21;
+static const char *APP_DIR_PREFIX = "ftpii_";
 
 static void initialise_ftpii() {
     initialise_video();
@@ -48,8 +50,21 @@ static void initialise_ftpii() {
     wait_for_network_initialisation();
 }
 
+static void set_password_from_executable(char *executable) {
+    char *dir = basename(dirname(executable));
+    if (strncasecmp(APP_DIR_PREFIX, dir, strlen(APP_DIR_PREFIX)) == 0) {
+        set_ftp_password(dir + strlen(APP_DIR_PREFIX));
+    }
+}
+
 int main(int argc, char **argv) {
     initialise_ftpii();
+
+    if (argc > 1) {
+        set_ftp_password(argv[1]);
+    } else if (argc == 1) {
+        set_password_from_executable(argv[0]);
+    }
 
     s32 server = create_server(PORT);
     printf("\nListening on TCP port %u...\n", PORT);

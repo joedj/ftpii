@@ -41,8 +41,10 @@ static const u8 MAX_CLIENTS = 5;
 static const char *CRLF = "\r\n";
 static const u32 CRLF_LENGTH = 2;
 
+
 static volatile u8 num_clients = 0;
 static volatile u16 passive_port = 1024;
+static char *password = NULL;
 
 extern u32 net_gethostip();
 
@@ -54,6 +56,7 @@ struct client_struct {
     char pending_rename[MAXPATHLEN];
     long restart_marker;
     struct sockaddr_in address;
+    bool authenticated;
 };
 
 typedef struct client_struct client_t;
@@ -81,14 +84,20 @@ static s32 ftp_USER(client_t *client, char *username) {
     return write_reply(client, 331, "User name okay, need password.");
 }
 
-static s32 ftp_PASS(client_t *client, char *password) {
-    return write_reply(client, 230, "User logged in, proceed.");
+static s32 ftp_PASS(client_t *client, char *password_attempt) {
+    if (!password || !strcmp(password, password_attempt)) {
+        client->authenticated = true;
+        return write_reply(client, 230, "User logged in, proceed.");
+    } else {
+        return write_reply(client, 530, "Login incorrect.");
+    }
 }
 
 static s32 ftp_REIN(client_t *client, char *rest) {
     close_passive_socket(client);
     strcpy(client->cwd, "/");
     client->representation_type = 'A';
+    client->authenticated = false;
     return write_reply(client, 220, "Service ready for new user.");
 }
 
@@ -485,6 +494,10 @@ static s32 ftp_SUPERFLUOUS(client_t *client, char *rest) {
     return write_reply(client, 202, "Command not implemented, superfluous at this site.");
 }
 
+static s32 ftp_NEEDAUTH(client_t *client, char *rest) {
+    return write_reply(client, 530, "Please login with USER and PASS.");
+}
+
 static s32 ftp_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 502, "Command not implemented.");
 }
@@ -503,7 +516,10 @@ static s32 process_command(client_t *client, char *cmd_line) {
         return 0;
     }
     ftp_command_handler handler = ftp_UNKNOWN;
-    if      (!strcasecmp("LIST", cmd)) handler = ftp_LIST;
+    if      (!strcasecmp("USER", cmd)) handler = ftp_USER;
+    else if (!strcasecmp("PASS", cmd)) handler = ftp_PASS;
+    else if (!client->authenticated)   handler = ftp_NEEDAUTH;
+    else if (!strcasecmp("LIST", cmd)) handler = ftp_LIST;
     else if (!strcasecmp("PWD" , cmd)) handler = ftp_PWD;
     else if (!strcasecmp("CWD" , cmd)) handler = ftp_CWD;
     else if (!strcasecmp("CDUP", cmd)) handler = ftp_CDUP;
@@ -523,14 +539,11 @@ static s32 process_command(client_t *client, char *cmd_line) {
     else if (!strcasecmp("RNFR", cmd)) handler = ftp_RNFR;
     else if (!strcasecmp("RNTO", cmd)) handler = ftp_RNTO;
     else if (!strcasecmp("NLST", cmd)) handler = ftp_NLST;
-    else if (!strcasecmp("USER", cmd)) handler = ftp_USER;
-    else if (!strcasecmp("PASS", cmd)) handler = ftp_PASS;
     else if (!strcasecmp("QUIT", cmd)) handler = ftp_QUIT;
     else if (!strcasecmp("REIN", cmd)) handler = ftp_REIN;
     else if (!strcasecmp("SITE", cmd)) handler = ftp_SITE;
-    else if (!strcasecmp("ALLO", cmd)) handler = ftp_SUPERFLUOUS;
-    else if (!strcasecmp("SITE", cmd)) handler = ftp_SUPERFLUOUS;
     else if (!strcasecmp("NOOP", cmd)) handler = ftp_NOOP;
+    else if (!strcasecmp("ALLO", cmd)) handler = ftp_SUPERFLUOUS;
 
     return handler(client, rest);
 }
@@ -628,6 +641,7 @@ void accept_ftp_client(s32 server) {
     strcpy(client->cwd, "/");
     *client->pending_rename = '\0';
     client->restart_marker = 0;
+    client->authenticated = false;
     memcpy(&client->address, &client_address, sizeof(client_address));
 
     lwp_t client_thread;
@@ -640,4 +654,8 @@ void accept_ftp_client(s32 server) {
         num_clients++;
         mutex_release();
     }
+}
+
+void set_ftp_password(char *new_password) {
+    password = new_password;
 }
