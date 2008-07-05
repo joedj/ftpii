@@ -66,7 +66,7 @@ void set_ftp_password(char *new_password) {
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
         if (!password) die("Unable to allocate memory for password, exiting");
-        strcpy(password, new_password);
+        strcpy((char *)password, new_password);
     } else {
         password = NULL;
     }
