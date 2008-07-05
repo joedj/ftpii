@@ -41,10 +41,9 @@ static const u8 MAX_CLIENTS = 5;
 static const char *CRLF = "\r\n";
 static const u32 CRLF_LENGTH = 2;
 
-
 static volatile u8 num_clients = 0;
 static volatile u16 passive_port = 1024;
-static char *password = NULL;
+static volatile char *password = NULL;
 
 extern u32 net_gethostip();
 
@@ -60,6 +59,10 @@ struct client_struct {
 };
 
 typedef struct client_struct client_t;
+
+void set_ftp_password(char *new_password) {
+    password = new_password;
+}
 
 /*
     TODO: support multi-line reply
@@ -85,7 +88,7 @@ static s32 ftp_USER(client_t *client, char *username) {
 }
 
 static s32 ftp_PASS(client_t *client, char *password_attempt) {
-    if (!password || !strcmp(password, password_attempt)) {
+    if (!password || !strcmp((char *)password, password_attempt)) {
         client->authenticated = true;
         return write_reply(client, 230, "User logged in, proceed.");
     } else {
@@ -470,20 +473,55 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
     return write_reply(client, 350, msg);
 }
 
-static s32 ftp_SITE(client_t *client, char *rest) {
-    if (!strcasecmp("LOADER", rest)) {
-        write_reply(client, 200, "Exiting to loader.");
-        exit(0);
-    } else if (!strcasecmp("CLEAR", rest)) {
-        s32 result = write_reply(client, 200, "Cleared.");
-        u32 i;
-        for (i = 0; i < 100; i++) printf("\n");
-        printf("\x1b[2;0H");
-        return result;
-    } else if (!strncasecmp("CHMOD ", rest, 6)) {  // This is implemented as a no-op to prevent some FTP clients from displaying skip/abort/retry type prompts
-        return write_reply(client, 250, "SITE CHMOD command ok.");
-    } 
+static s32 ftp_SITE_LOADER(client_t *client, char *rest) {
+    write_reply(client, 200, "Exiting to loader.");
+    exit(0);
+}
+
+static s32 ftp_SITE_CLEAR(client_t *client, char *rest) {
+    s32 result = write_reply(client, 200, "Cleared.");
+    u32 i;
+    for (i = 0; i < 100; i++) printf("\n");
+    printf("\x1b[2;0H");
+    return result;
+}
+
+/*
+    This is implemented as a no-op to prevent some FTP clients
+    from displaying skip/abort/retry type prompts.
+*/
+static s32 ftp_SITE_CHMOD(client_t *client, char *rest) {
+    return write_reply(client, 250, "SITE CHMOD command ok.");
+}
+
+static s32 ftp_SITE_PASSWD(client_t *client, char *new_password) {
+    set_ftp_password(new_password);
+    return write_reply(client, 200, "Password changed.");
+}
+
+static s32 ftp_SITE_NOPASSWD(client_t *client, char *rest) {
+    set_ftp_password(NULL);
+    return write_reply(client, 200, "Authentication disabled.");
+}
+
+static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 501, "Unknown SITE command.");
+}
+
+typedef s32 (*ftp_command_handler)(client_t *client, char *args);
+
+static s32 ftp_SITE(client_t *client, char *cmd_line) {
+    char cmd[FTP_BUFFER_SIZE], rest[FTP_BUFFER_SIZE];
+    char *args[] = { cmd, rest };
+    split(cmd_line, ' ', 1, args); 
+    ftp_command_handler handler = ftp_SITE_UNKNOWN;
+    if (!strcasecmp("LOADER", cmd)) handler = ftp_SITE_LOADER;
+    else if (!strcasecmp("CLEAR", cmd)) handler = ftp_SITE_CLEAR;
+    else if (!strcasecmp("CHMOD", cmd)) handler = ftp_SITE_CHMOD;
+    else if (!strcasecmp("PASSWD", cmd)) handler = ftp_SITE_PASSWD;
+    else if (!strcasecmp("NOPASSWD", cmd)) handler = ftp_SITE_NOPASSWD;
+    
+    return handler(client, rest);
 }
 
 static s32 ftp_NOOP(client_t *client, char *rest) {
@@ -501,8 +539,6 @@ static s32 ftp_NEEDAUTH(client_t *client, char *rest) {
 static s32 ftp_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 502, "Command not implemented.");
 }
-
-typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 
 /*
     returns negative to signal an error that requires closing the connection
@@ -654,8 +690,4 @@ void accept_ftp_client(s32 server) {
         num_clients++;
         mutex_release();
     }
-}
-
-void set_ftp_password(char *new_password) {
-    password = new_password;
 }

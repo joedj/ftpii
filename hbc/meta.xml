@@ -2,7 +2,7 @@
 <app version="1">
   <name>ftpii</name>
   <coder>joedj, srg</coder>
-  <version>0.0.9</version>
+  <version>0.0.10</version>
   <short_description>An FTP server</short_description> 
   <long_description>ftpii is an FTP server.
 
