@@ -62,15 +62,13 @@ typedef struct client_struct client_t;
 
 void set_ftp_password(char *new_password) {
     mutex_acquire();
-    if (password) {
-        free((char *)password);
-        password = NULL;
-    }
+    if (password) free((char *)password);
     if (new_password) {
-        char *password_copy = malloc(strlen(new_password) + 1);
-        if (!password_copy) die("Unable to allocate memory for password, exiting");
-        strcpy(password_copy, new_password);
-        password = password_copy;
+        password = malloc(strlen(new_password) + 1);
+        if (!password) die("Unable to allocate memory for password, exiting");
+        strcpy(password, new_password);
+    } else {
+        password = NULL;
     }
     mutex_release();
 }
