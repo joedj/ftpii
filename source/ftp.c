@@ -61,7 +61,25 @@ struct client_struct {
 typedef struct client_struct client_t;
 
 void set_ftp_password(char *new_password) {
-    password = new_password;
+    mutex_acquire();
+    if (password) {
+        free((char *)password);
+        password = NULL;
+    }
+    if (new_password) {
+        char *password_copy = malloc(strlen(new_password) + 1);
+        if (!password_copy) die("Unable to allocate memory for password, exiting");
+        strcpy(password_copy, new_password);
+        password = password_copy;
+    }
+    mutex_release();
+}
+
+static bool compare_ftp_password(char *password_attempt) {
+    mutex_acquire();
+    bool result = !password || !strcmp((char *)password, password_attempt);
+    mutex_release();
+    return result;
 }
 
 /*
@@ -88,7 +106,7 @@ static s32 ftp_USER(client_t *client, char *username) {
 }
 
 static s32 ftp_PASS(client_t *client, char *password_attempt) {
-    if (!password || !strcmp((char *)password, password_attempt)) {
+    if (compare_ftp_password(password_attempt)) {
         client->authenticated = true;
         return write_reply(client, 230, "User logged in, proceed.");
     } else {
@@ -510,18 +528,22 @@ static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
 
 typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 
-static s32 ftp_SITE(client_t *client, char *cmd_line) {
+static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **commands, const ftp_command_handler *handlers) {
     char cmd[FTP_BUFFER_SIZE], rest[FTP_BUFFER_SIZE];
     char *args[] = { cmd, rest };
     split(cmd_line, ' ', 1, args); 
-    ftp_command_handler handler = ftp_SITE_UNKNOWN;
-    if (!strcasecmp("LOADER", cmd)) handler = ftp_SITE_LOADER;
-    else if (!strcasecmp("CLEAR", cmd)) handler = ftp_SITE_CLEAR;
-    else if (!strcasecmp("CHMOD", cmd)) handler = ftp_SITE_CHMOD;
-    else if (!strcasecmp("PASSWD", cmd)) handler = ftp_SITE_PASSWD;
-    else if (!strcasecmp("NOPASSWD", cmd)) handler = ftp_SITE_NOPASSWD;
-    
-    return handler(client, rest);
+    s32 i;
+    for (i = 0; commands[i]; i++) {
+        if (!strcasecmp(commands[i], cmd)) break;
+    }
+    return handlers[i](client, rest);
+}
+
+static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", NULL };
+static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_UNKNOWN };
+
+static s32 ftp_SITE(client_t *client, char *cmd_line) {
+    return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);
 }
 
 static s32 ftp_NOOP(client_t *client, char *rest) {
@@ -540,48 +562,43 @@ static s32 ftp_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 502, "Command not implemented.");
 }
 
+static const char *unauthenticated_commands[] = { "USER", "PASS", "QUIT", "REIN", "NOOP", NULL };
+static const ftp_command_handler unauthenticated_handlers[] = { ftp_USER, ftp_PASS, ftp_QUIT, ftp_REIN, ftp_NOOP, ftp_NEEDAUTH };
+
+static const char *authenticated_commands[] = {
+    "USER", "PASS", "LIST", "PWD", "CWD", "CDUP",
+    "SIZE", "PASV", "PORT", "TYPE", "SYST", "MODE",
+    "RETR", "STOR", "APPE", "REST", "DELE", "MKD",
+    "RMD", "RNFR", "RNTO", "NLST", "QUIT", "REIN",
+    "SITE", "NOOP", "ALLO", NULL
+};
+static const ftp_command_handler authenticated_handlers[] = {
+    ftp_USER, ftp_PASS, ftp_LIST, ftp_PWD, ftp_CWD, ftp_CDUP,
+    ftp_SIZE, ftp_PASV, ftp_PORT, ftp_TYPE, ftp_SYST, ftp_MODE,
+    ftp_RETR, ftp_STOR, ftp_APPE, ftp_REST, ftp_DELE, ftp_MKD,
+    ftp_DELE, ftp_RNFR, ftp_RNTO, ftp_NLST, ftp_QUIT, ftp_REIN,
+    ftp_SITE, ftp_NOOP, ftp_SUPERFLUOUS, ftp_UNKNOWN
+};
+
 /*
     returns negative to signal an error that requires closing the connection
 */
 static s32 process_command(client_t *client, char *cmd_line) {
-    printf("Got command: %s\n", cmd_line);
-    char cmd[FTP_BUFFER_SIZE], rest[FTP_BUFFER_SIZE];
-    char *args[] = { cmd, rest };
-    u32 num_args = split(cmd_line, ' ', 1, args); 
-    if (num_args == 0) {
+    if (strlen(cmd_line) == 0) {
         return 0;
     }
-    ftp_command_handler handler = ftp_UNKNOWN;
-    if      (!strcasecmp("USER", cmd)) handler = ftp_USER;
-    else if (!strcasecmp("PASS", cmd)) handler = ftp_PASS;
-    else if (!client->authenticated)   handler = ftp_NEEDAUTH;
-    else if (!strcasecmp("LIST", cmd)) handler = ftp_LIST;
-    else if (!strcasecmp("PWD" , cmd)) handler = ftp_PWD;
-    else if (!strcasecmp("CWD" , cmd)) handler = ftp_CWD;
-    else if (!strcasecmp("CDUP", cmd)) handler = ftp_CDUP;
-    else if (!strcasecmp("SIZE", cmd)) handler = ftp_SIZE;
-    else if (!strcasecmp("PASV", cmd)) handler = ftp_PASV;
-    else if (!strcasecmp("PORT", cmd)) handler = ftp_PORT;
-    else if (!strcasecmp("TYPE", cmd)) handler = ftp_TYPE;
-    else if (!strcasecmp("SYST", cmd)) handler = ftp_SYST;
-    else if (!strcasecmp("MODE", cmd)) handler = ftp_MODE;
-    else if (!strcasecmp("RETR", cmd)) handler = ftp_RETR;
-    else if (!strcasecmp("STOR", cmd)) handler = ftp_STOR;
-    else if (!strcasecmp("APPE", cmd)) handler = ftp_APPE;
-    else if (!strcasecmp("REST", cmd)) handler = ftp_REST;
-    else if (!strcasecmp("DELE", cmd)) handler = ftp_DELE;
-    else if (!strcasecmp("MKD",  cmd)) handler = ftp_MKD;
-    else if (!strcasecmp("RMD",  cmd)) handler = ftp_DELE;
-    else if (!strcasecmp("RNFR", cmd)) handler = ftp_RNFR;
-    else if (!strcasecmp("RNTO", cmd)) handler = ftp_RNTO;
-    else if (!strcasecmp("NLST", cmd)) handler = ftp_NLST;
-    else if (!strcasecmp("QUIT", cmd)) handler = ftp_QUIT;
-    else if (!strcasecmp("REIN", cmd)) handler = ftp_REIN;
-    else if (!strcasecmp("SITE", cmd)) handler = ftp_SITE;
-    else if (!strcasecmp("NOOP", cmd)) handler = ftp_NOOP;
-    else if (!strcasecmp("ALLO", cmd)) handler = ftp_SUPERFLUOUS;
 
-    return handler(client, rest);
+    printf("Got command: %s\n", cmd_line);
+
+    const char **commands = unauthenticated_commands;
+    const ftp_command_handler *handlers = unauthenticated_handlers;
+
+    if (client->authenticated) {
+        commands = authenticated_commands;
+        handlers = authenticated_handlers;
+    }
+
+    return dispatch_to_handler(client, cmd_line, commands, handlers);
 }
 
 static void *process_connection(void *client_ptr) {
