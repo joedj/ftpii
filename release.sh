@@ -13,7 +13,7 @@ mkdir ftpii && \
 mv hbc/meta.xml ftpii && \
 mv hbc/icon.png ftpii && \
 cp $FTPII_VERSION.elf ftpii/boot.elf && \
-rm -f *.elf && \
+rm -f *.elf *.dol && \
 rm -rf hbc && \
 (find . -name .svn | xargs rm -rf) && \
 rm release.sh && \
