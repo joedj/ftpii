@@ -369,7 +369,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
     return num_results;
 }
 
-/**
+/*
     Returns a copy of path up to the last '/' character,
     If path does not contain '/', return "".
     Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
@@ -388,7 +388,7 @@ char *dirname(char *path) {
     return "";
 }
 
-/**
+/*
     Returns a pointer into path, starting after the right-most '/' character.
     If path does not contain '/', return path.
 */
