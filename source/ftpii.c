@@ -35,19 +35,19 @@ static const char *APP_DIR_PREFIX = "ftpii_";
 static void initialise_ftpii() {
     initialise_video();
     initialise_global_mutex();
-    initialise_fat();
     WPAD_Init();
     if (initialise_reset_button()) {
         printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     } else {
         printf("Unable to start reset thread - hold down the power button to exit.\n");
     }
+    wait_for_network_initialisation();
+    initialise_fat();
     if (initialise_mount_buttons()) {
         printf("To remount a device, hold 1 on WiiMote #1.\n");
     } else {
         printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
     }
-    wait_for_network_initialisation();
 }
 
 static void set_password_from_executable(char *executable) {
