@@ -47,7 +47,10 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20080705 0.0.10 boot.elf rebuilt with patched libogc to fix startup crashes when USB devices are present.
+20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)
+                Attempt to fix USB ethernet adapter by initialisaing network subsystem before FAT.
+                Added release_date to meta.xml.
+20080718 0.0.10 boot.elf rebuilt with patched libogc to fix startup crashes when USB devices are present.
                 Added SITE PASSWD and SITE NOPASSWD for controlling the authentication remotely.
 20080705 0.0.9  Added authentication - can specify a password using directory name or wiiload arg.
 20080629 0.0.8  Added no-op SITE CHMOD command to prevent some FTP clients from displaying skip/abort/retry type prompts.
