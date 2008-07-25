@@ -47,6 +47,8 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files,
+                allowing Data Management to see uploaded save games (e.g. TP hack).
 20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)
                 Attempt to fix USB ethernet adapter by initialisaing network subsystem before FAT.
                 Added release_date to meta.xml.
