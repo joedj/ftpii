@@ -24,22 +24,22 @@ misrepresented as being the original software.
 #include <errno.h>
 #include <fat.h>
 #include <network.h>
+#include <ogc/lwp_watchdog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#define NET_BUFFER_SIZE 1024
-#define FREAD_BUFFER_SIZE 1024
+#define NET_BUFFER_SIZE 6144
+#define FREAD_BUFFER_SIZE 8192
 
 const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
-
-static mutex_t global_mutex;
 
 static volatile bool fatInitState = false;
 
@@ -47,18 +47,6 @@ void die(char *msg) {
     perror(msg);
     sleep(5);
     exit(1);
-}
-
-void initialise_global_mutex() {
-    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
-}
-
-void mutex_acquire() {
-    while (LWP_MutexLock(global_mutex));
-}
-
-void mutex_release() {
-    while (LWP_MutexUnlock(global_mutex));
 }
 
 bool mounted(PARTITION_INTERFACE partition) {
@@ -203,8 +191,6 @@ void initialise_video() {
     VIDEO_SetNextFramebuffer(xfb);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
-    VIDEO_WaitVSync(); // XXX: do i need this? why? where else?
-    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync(); // XXX: no idea why this is done - came from template.c. do i need to do this every time i call VIDEO_WaitVSync() ??
     printf("\x1b[2;0H");
 }
 
@@ -225,9 +211,25 @@ void wait_for_network_initialisation() {
     }
 }
 
+s32 set_blocking(s32 s, bool blocking) {
+    s32 flags;
+    if ((flags = net_fcntl(s, F_GETFL, 0)) < 0) {
+        printf("DEBUG: set_blocking(%i, %i): Unable to get flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
+    } else if ((flags = net_fcntl(s, F_SETFL, blocking ? (flags&~4) : (flags|4))) < 0) {
+        printf("DEBUG: set_blocking(%i, %i): Unable to set flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
+    }
+    return flags;
+}
+
+s32 net_close_blocking(s32 s) {
+    set_blocking(s, true);
+    return net_close(s);
+}
+
 s32 create_server(u16 port) {
     s32 server = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (server < 0) die("Error creating socket, exiting");
+    set_blocking(server, false);
 
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
@@ -247,57 +249,31 @@ s32 create_server(u16 port) {
     return server;
 }
 
-s32 accept_peer(s32 server, struct sockaddr_in *addr) {
-    s32 peer;
-    socklen_t addrlen = sizeof(*addr);
-    if ((peer = net_accept(server, (struct sockaddr *)addr, &addrlen)) < 0) {
-        net_close(server);
-        die("Error accepting connection");
-    }
-    printf("\nAccepted connection from %s!\n", inet_ntoa(addr->sin_addr));
-    return peer;
-}
-
 typedef s32 (*transferrer_type)(s32 s, void *mem, s32 len);
-inline static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transferrer) {
-    s32 bytes_transferred = 0;
+static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transferrer) {
+    s32 result = 0;
     s32 remaining = length;
     while (remaining) {
-        if ((bytes_transferred = transferrer(s, buf, remaining > NET_BUFFER_SIZE ? NET_BUFFER_SIZE : remaining)) > 0) {
+        s32 bytes_transferred = transferrer(s, buf, remaining > NET_BUFFER_SIZE ? NET_BUFFER_SIZE : remaining);
+        if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
+        } else if (bytes_transferred == -EAGAIN) {
+            usleep(1000);
+            continue;
         } else if (bytes_transferred < 0) {
-            return bytes_transferred;
+            result = bytes_transferred;
+            break;
         } else {
-            return -ENODATA;
+            result = -ENODATA;
+            break;
         }
     }
-    return 0;
+    return result;
 }
 
-inline s32 write_exact(s32 s, char *buf, s32 length) {
+s32 write_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, (transferrer_type)net_write);
-}
-
-s32 write_from_file(s32 s, FILE *f) {
-    char buf[FREAD_BUFFER_SIZE];
-    s32 bytes_read, bytes_written;
-    while (1) {
-        bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
-        if (bytes_read > 0) {
-            if ((bytes_written = write_exact(s, buf, bytes_read)) < 0) {
-                printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -bytes_written, strerror(-bytes_written));
-                return bytes_written;
-            }
-        }
-        if (bytes_read < FREAD_BUFFER_SIZE) {
-            s32 result = -!feof(f);
-            if (result < 0) {
-                printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-            }
-            return result;
-        }
-    }
 }
 
 /*
@@ -309,21 +285,51 @@ inline s32 read_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, net_read);
 }
 
+s32 write_from_file(s32 s, FILE *f) {
+    char buf[FREAD_BUFFER_SIZE];
+    s32 bytes_read;
+    s32 result = 0;
+    while (1) {
+        bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
+        if (bytes_read > 0) {
+            result = write_exact(s, buf, bytes_read);
+            if (result < 0) {
+                printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+                break;
+            }
+        }
+        if (bytes_read < FREAD_BUFFER_SIZE) {
+            result = -!feof(f);
+            if (result < 0) {
+                printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            }
+            break;
+        }
+    }
+    fclose(f);
+    return result;
+}
+
 s32 read_to_file(s32 s, FILE *f) {
     char buf[NET_BUFFER_SIZE];
     s32 bytes_read;
     while (1) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
-            printf("DEBUG: read_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+            if (bytes_read != -EAGAIN) {
+                printf("DEBUG: read_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+                fclose(f);
+            }
             return bytes_read;
         } else if (bytes_read == 0) {
+            fclose(f);
             return 0;
         }
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
             printf("DEBUG: read_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            fclose(f);
             return -1;
         }
     }

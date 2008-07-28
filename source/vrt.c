@@ -246,10 +246,8 @@ int vrt_chdir(char *cwd, char *path) {
         return 0;
     }
     free(real_path);
-    mutex_acquire();
     int result = (int)with_virtual_path(cwd, chdir, path, -1, NULL);
     if (!result) vrt_getcwd(cwd, MAXPATHLEN); // TODO: error checking
-    mutex_release();
     return result;
 }
 

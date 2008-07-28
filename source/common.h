@@ -50,15 +50,17 @@ void initialise_video();
 
 void wait_for_network_initialisation();
 
-s32 create_server(u16 port);
+s32 set_blocking(s32 s, bool blocking);
 
-s32 accept_peer(s32 server, struct sockaddr_in *addr);
+s32 net_close_blocking(s32 s);
+
+s32 create_server(u16 port);
 
 s32 write_exact(s32 s, char *buf, s32 length);
 
-s32 write_from_file(s32 s, FILE *f);
-
 s32 read_exact(s32 s, char *buf, s32 length);
+
+s32 write_from_file(s32 s, FILE *f);
 
 s32 read_to_file(s32 s, FILE *f);
 
