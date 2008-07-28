@@ -34,7 +34,6 @@ static const char *APP_DIR_PREFIX = "ftpii_";
 
 static void initialise_ftpii() {
     initialise_video();
-    initialise_global_mutex();
     WPAD_Init();
     if (initialise_reset_button()) {
         printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
@@ -67,8 +66,8 @@ int main(int argc, char **argv) {
     }
 
     s32 server = create_server(PORT);
-    printf("\nListening on TCP port %u...\n", PORT);
+    printf("Listening on TCP port %u...\n", PORT);
     while (1) {
-        accept_ftp_client(server);
+        process_ftp_events(server);
     }
 }

@@ -29,8 +29,8 @@ homebrew/development environment that it is.
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
  - socket timeouts
+ - support power button on console and wiimotes
  - use SO_REUSEADDR ?
- - async networking
  - nice UI ;-)
 
 
