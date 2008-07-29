@@ -271,7 +271,7 @@ static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transfe
     return result;
 }
 
-s32 write_exact(s32 s, char *buf, s32 length) {
+s32 send_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, (transferrer_type)net_write);
 }
 
@@ -280,27 +280,27 @@ s32 write_exact(s32 s, char *buf, s32 length) {
     Returns negative if a read error or EOF occurrs before length bytes.  buffer may have been modified.
     Otherwise, returns length, which will be equai to the total number of bytes read into buffer.
 */
-inline s32 read_exact(s32 s, char *buf, s32 length) {
+inline s32 recv_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, net_read);
 }
 
-s32 write_from_file(s32 s, FILE *f) {
+s32 send_from_file(s32 s, FILE *f) {
     char buf[FREAD_BUFFER_SIZE];
     s32 bytes_read;
     s32 result = 0;
 
     bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
     if (bytes_read > 0) {
-        result = write_exact(s, buf, bytes_read);
+        result = send_exact(s, buf, bytes_read);
         if (result < 0) {
-            printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+            printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
             goto end;
         }
     }
     if (bytes_read < FREAD_BUFFER_SIZE) {
         result = -!feof(f);
         if (result < 0) {
-            printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
         }
         goto end;
     }
@@ -310,14 +310,14 @@ s32 write_from_file(s32 s, FILE *f) {
     return result;
 }
 
-s32 read_to_file(s32 s, FILE *f) {
+s32 recv_to_file(s32 s, FILE *f) {
     char buf[NET_BUFFER_SIZE];
     s32 bytes_read;
     while (1) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read != -EAGAIN) {
-                printf("DEBUG: read_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+                printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
                 fclose(f);
             }
             return bytes_read;
@@ -328,7 +328,7 @@ s32 read_to_file(s32 s, FILE *f) {
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
-            printf("DEBUG: read_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
             fclose(f);
             return -1;
         }

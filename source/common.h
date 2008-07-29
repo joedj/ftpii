@@ -56,13 +56,13 @@ s32 net_close_blocking(s32 s);
 
 s32 create_server(u16 port);
 
-s32 write_exact(s32 s, char *buf, s32 length);
+s32 send_exact(s32 s, char *buf, s32 length);
 
-s32 read_exact(s32 s, char *buf, s32 length);
+s32 recv_exact(s32 s, char *buf, s32 length);
 
-s32 write_from_file(s32 s, FILE *f);
+s32 send_from_file(s32 s, FILE *f);
 
-s32 read_to_file(s32 s, FILE *f);
+s32 recv_to_file(s32 s, FILE *f);
 
 u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
