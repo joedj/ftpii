@@ -35,7 +35,7 @@ misrepresented as being the original software.
 #include "vrt.h"
 
 #define FTP_BUFFER_SIZE 512
-#define MAX_CLIENTS 16
+#define MAX_CLIENTS 5
 
 static const u16 SRC_PORT = 20;
 static const s32 EQUIT = 696969;
@@ -365,7 +365,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1900 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
+        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
         if ((result = write_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
@@ -779,5 +779,5 @@ void process_ftp_events(s32 server) {
         }
     }
     
-    usleep(20000);
+    usleep(5000);
 }
