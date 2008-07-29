@@ -95,7 +95,7 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
     if (msgbuf == NULL) return -ENOMEM;
     sprintf(msgbuf, "%u %s\r\n", code, msg);
     printf("Wrote reply: %s", msgbuf);
-    return write_exact(client->socket, msgbuf, msglen);
+    return send_exact(client->socket, msgbuf, msglen);
 }
 
 static void close_passive_socket(client_t *client) {
@@ -293,7 +293,7 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
 
 typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg);
 
-static s32 do_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
+static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) {
         printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
@@ -320,7 +320,7 @@ static s32 do_data_connection_active(client_t *client, data_connection_callback 
     return 0;
 }
 
-static s32 do_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
+static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
     client->data_socket = client->passive_socket;
     client->data_connection_connected = false;
     client->data_callback = callback;
@@ -329,11 +329,11 @@ static s32 do_data_connection_passive(client_t *client, data_connection_callback
     return 0;
 }
 
-static s32 do_data_connection(client_t *client, void *callback, void *arg) {
+static s32 prepare_data_connection(client_t *client, void *callback, void *arg) {
     s32 result = write_reply(client, 150, "Transferring data.");
     if (result >= 0) {
-        data_connection_handler handler = do_data_connection_active;
-        if (client->passive_socket >= 0) handler = do_data_connection_passive;
+        data_connection_handler handler = prepare_data_connection_active;
+        if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
         result = handler(client, (data_connection_callback)callback, arg);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
@@ -351,7 +351,7 @@ static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
         filename[end_index] = CRLF[0];
         filename[end_index + 1] = CRLF[1];
         filename[end_index + 2] = '\0';
-        if ((result = write_exact(data_socket, filename, strlen(filename))) < 0) {
+        if ((result = send_exact(data_socket, filename, strlen(filename))) < 0) {
             break;
         }
     }
@@ -366,7 +366,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
         sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
-        if ((result = write_exact(data_socket, line, strlen(line))) < 0) {
+        if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
     }
@@ -384,7 +384,7 @@ static s32 ftp_NLST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = do_data_connection(client, send_nlst, dir);
+    s32 result = prepare_data_connection(client, send_nlst, dir);
     if (result < 0) vrt_dirclose(dir);
     return result;
 }
@@ -407,7 +407,7 @@ static s32 ftp_LIST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = do_data_connection(client, send_list, dir);
+    s32 result = prepare_data_connection(client, send_list, dir);
     if (result < 0) vrt_dirclose(dir);
     return result;
 }
@@ -426,7 +426,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     }
     client->restart_marker = 0;
     
-    s32 result = do_data_connection(client, write_from_file, f);
+    s32 result = prepare_data_connection(client, send_from_file, f);
     if (result < 0) fclose(f);
     return result;
 }
@@ -435,7 +435,7 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = do_data_connection(client, read_to_file, f);
+    s32 result = prepare_data_connection(client, recv_to_file, f);
     if (result < 0) fclose(f);
     return result;
 }
