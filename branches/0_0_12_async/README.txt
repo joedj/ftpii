@@ -32,6 +32,7 @@ homebrew/development environment that it is.
  - support power button on console and wiimotes
  - use SO_REUSEADDR ?
  - nice UI ;-)
+ - gamecube controller support
 
 
 *** CONTACT ***
