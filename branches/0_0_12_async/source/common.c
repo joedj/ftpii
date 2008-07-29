@@ -33,8 +33,8 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#define NET_BUFFER_SIZE 6144
-#define FREAD_BUFFER_SIZE 8192
+#define NET_BUFFER_SIZE 32768
+#define FREAD_BUFFER_SIZE 32768
 
 const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
@@ -253,14 +253,12 @@ typedef s32 (*transferrer_type)(s32 s, void *mem, s32 len);
 static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transferrer) {
     s32 result = 0;
     s32 remaining = length;
+    set_blocking(s, true);
     while (remaining) {
-        s32 bytes_transferred = transferrer(s, buf, remaining > NET_BUFFER_SIZE ? NET_BUFFER_SIZE : remaining);
+        s32 bytes_transferred = transferrer(s, buf, MIN(remaining, NET_BUFFER_SIZE));
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
-        } else if (bytes_transferred == -EAGAIN) {
-            usleep(1000);
-            continue;
         } else if (bytes_transferred < 0) {
             result = bytes_transferred;
             break;
@@ -269,6 +267,7 @@ static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transfe
             break;
         }
     }
+    set_blocking(s, false);
     return result;
 }
 
@@ -289,23 +288,24 @@ s32 write_from_file(s32 s, FILE *f) {
     char buf[FREAD_BUFFER_SIZE];
     s32 bytes_read;
     s32 result = 0;
-    while (1) {
-        bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
-        if (bytes_read > 0) {
-            result = write_exact(s, buf, bytes_read);
-            if (result < 0) {
-                printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
-                break;
-            }
-        }
-        if (bytes_read < FREAD_BUFFER_SIZE) {
-            result = -!feof(f);
-            if (result < 0) {
-                printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-            }
-            break;
+
+    bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
+    if (bytes_read > 0) {
+        result = write_exact(s, buf, bytes_read);
+        if (result < 0) {
+            printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+            goto end;
         }
     }
+    if (bytes_read < FREAD_BUFFER_SIZE) {
+        result = -!feof(f);
+        if (result < 0) {
+            printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+        }
+        goto end;
+    }
+    return -EAGAIN;
+    end:
     fclose(f);
     return result;
 }
