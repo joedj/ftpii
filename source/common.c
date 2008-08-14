@@ -43,10 +43,19 @@ static const u32 CACHE_PAGES = 8192;
 
 static volatile bool fatInitState = false;
 
+void quit(s32 status) {
+    u32 hbc_stub = *(u32*)0x80001800;
+    if (hbc_stub) {
+        exit(status);
+    } else {
+        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    }
+}
+
 void die(char *msg) {
     perror(msg);
     sleep(5);
-    exit(1);
+    quit(1);
 }
 
 bool mounted(PARTITION_INTERFACE partition) {
@@ -94,7 +103,8 @@ static void *run_reset_thread(void *arg) {
         WPAD_ScanPads();
     }
     printf("\nKTHXBYE\n");
-    exit(0);
+    quit(0);
+    return NULL;
 }
 
 static void remount(PARTITION_INTERFACE partition, char *deviceName) {

@@ -44,6 +44,8 @@ u8 initialise_reset_button();
 
 u8 initialise_mount_buttons();
 
+void quit(s32 status);
+
 void die(char *msg);
 
 void initialise_video();
