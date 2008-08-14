@@ -469,8 +469,9 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
 }
 
 static s32 ftp_SITE_LOADER(client_t *client, char *rest) {
-    write_reply(client, 200, "Exiting to loader.");
-    exit(0);
+    s32 result = write_reply(client, 200, "Exiting to loader.");
+    quit(0);
+    return result;
 }
 
 static s32 ftp_SITE_CLEAR(client_t *client, char *rest) {
