@@ -1,0 +1,18 @@
+This patch changes the network heap size from 8K to 34K, to improve performance.
+
+Index: libogc/network_wii.c
+===================================================================
+RCS file: /cvsroot/devkitpro/libogc/libogc/network_wii.c,v
+retrieving revision 1.15
+diff -u -w -u -w -r1.15 network_wii.c
+--- libogc/network_wii.c	5 Jun 2008 09:34:10 -0000	1.15
++++ libogc/network_wii.c	15 Aug 2008 12:40:46 -0000
+@@ -53,7 +53,7 @@
+ #include "network.h"
+ #include "ogcsys.h"
+ 
+-#define NET_HEAP_SIZE				8192
++#define NET_HEAP_SIZE				34816
+ 
+ #define IOS_O_NONBLOCK				(O_NONBLOCK >> 16)
+ 
