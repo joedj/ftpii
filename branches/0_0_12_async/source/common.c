@@ -115,79 +115,73 @@ void initialise_reset_button() {
     SYS_SetResetCallback(set_reset_flag);
 }
 
-static void remount(PARTITION_INTERFACE partition, char *deviceName) {
-    printf("Unmounting %s ...", deviceName);
-    if (!fatUnmount(partition)) {
-        printf("failure\n");
-    } else {
-        printf("done\n");
-    }
+typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
 
-    printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
-    int timer = 30;
-    do {
-        sleep(1);
-        timer--;
-    } while (timer > 0 && !(WPAD_ButtonsDown(0) & WPAD_BUTTON_1));
-    WPAD_Flush(0);
+static mountstate_t mountstate = MOUNTSTATE_START;
+static PARTITION_INTERFACE mount_partition;
+static char *mount_deviceName = NULL;
 
-    bool success = false;
-    if (!fatInitState) {
-        if (!initialise_fat()) {
-            printf("Unable to initialise FAT subsystem, unable to mount %s\n", deviceName);
-            return;
-        }
-        if (mounted(partition)) success = true;
-    } else if (fatMountNormalInterface(partition, CACHE_PAGES)) {
-        success = true;
-        fat_enable_readahead(partition);
-    }
-
-    if (success) {
-        printf("Success: %s is mounted.\n", deviceName);
-    } else {
-        printf("Error mounting %s.\n", deviceName);
-    }
-}
-
-static void *run_mount_handle_thread(void *arg) {
-    while (true) {
-
-        while (!(WPAD_ButtonsDown(0) & WPAD_BUTTON_1)) {
-            sleep(1);   
-        }
-        WPAD_Flush(0);
-
+void process_remount_event() {
+    if (mountstate == MOUNTSTATE_START || mountstate == MOUNTSTATE_SELECTDEVICE) {
         printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
         printf("             SD Gecko A (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
         printf("                  |\n");
         printf("             SD Gecko B (Down)\n");
-
-        while (!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN))) {
-            sleep(1);
+        mountstate = MOUNTSTATE_SELECTDEVICE;
+    } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
+        bool success = false;
+        if (!fatInitState) {
+            if (!initialise_fat()) {
+                printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
+                mountstate = MOUNTSTATE_START;
+                return;
+            }
+            if (mounted(mount_partition)) success = true;
+        } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
+            success = true;
+            fat_enable_readahead(mount_partition);
         }
-        u32 wpad = WPAD_ButtonsHeld(0);
-        WPAD_Flush(0);
 
-        if (wpad & WPAD_BUTTON_LEFT) {
-            remount(PI_INTERNAL_SD, "Front SD");
-        } else if (wpad & WPAD_BUTTON_RIGHT) {
-            remount(PI_USBSTORAGE, "USB storage");
-        } else if (wpad & WPAD_BUTTON_UP) {
-            remount(PI_SDGECKO_A, "SD Gecko in slot A");
-        } else if (wpad & WPAD_BUTTON_DOWN) {
-            remount(PI_SDGECKO_B, "SD Gecko in slot B");
+        if (success) {
+            printf("Success: %s is mounted.\n", mount_deviceName);
+        } else {
+            printf("Error mounting %s.\n", mount_deviceName);
         }
-        
-        sleep(1);
+        mountstate = MOUNTSTATE_START;
     }
 }
 
-u8 initialise_mount_buttons() {
-    lwp_t mount_thread;
-    return !LWP_CreateThread(&mount_thread, run_mount_handle_thread, NULL, NULL, 0, 80);
+void process_device_select_event(u32 pressed) {
+    if (mountstate == MOUNTSTATE_SELECTDEVICE) {
+        mount_deviceName = NULL;
+        if (pressed & WPAD_BUTTON_LEFT) {
+            mount_partition = PI_INTERNAL_SD;
+            mount_deviceName = "Front SD";
+        } else if (pressed & WPAD_BUTTON_RIGHT) {
+            mount_partition = PI_USBSTORAGE;
+            mount_deviceName = "USB storage";
+        } else if (pressed & WPAD_BUTTON_UP) {
+            mount_partition = PI_SDGECKO_A;
+            mount_deviceName = "SD Gecko in slot A";
+        } else if (pressed & WPAD_BUTTON_DOWN) {
+            mount_partition = PI_SDGECKO_B;
+            mount_deviceName = "SD Gecko in slot B";
+        }
+        if (mount_deviceName) {
+            printf("Unmounting %s ...", mount_deviceName);
+            fflush(stdout);
+            if (!fatUnmount(mount_partition)) {
+                // TODO: try unsafe unmount stuff
+                printf("failure\n");
+            } else {
+                printf("done\n");
+            }
+            printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", mount_deviceName);
+            mountstate = MOUNTSTATE_WAITFORDEVICE;
+        }
+    }
 }
 
 static void *xfb = NULL;

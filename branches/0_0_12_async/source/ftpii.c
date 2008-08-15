@@ -50,8 +50,10 @@ static void set_password_from_executable(char *executable) {
 }
 
 static void process_wiimote_events() {
-    u32 pressed = check_wiimote(WPAD_BUTTON_A);
+    u32 pressed = check_wiimote(WPAD_BUTTON_A | WPAD_BUTTON_1 | WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN);
     if (pressed & WPAD_BUTTON_A) set_reset_flag();
+    else if (pressed & WPAD_BUTTON_1) process_remount_event();
+    else if (pressed & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN)) process_device_select_event(pressed);
 }
 
 int main(int argc, char **argv) {
