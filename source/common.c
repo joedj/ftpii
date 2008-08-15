@@ -104,7 +104,7 @@ bool initialise_fat() {
 static volatile u8 _reset = 0;
 
 u8 reset() {
-    return _reset || check_wiimote(WPAD_BUTTON_A);
+    return _reset;
 }
 
 void set_reset_flag() {
@@ -207,7 +207,7 @@ void initialise_video() {
 
 static s32 initialise_network() {
     s32 result = -1;
-    while (!reset() && (result = net_init()) == -EAGAIN);
+    while (!_reset && !check_wiimote(WPAD_BUTTON_A) && (result = net_init()) == -EAGAIN);
     return result;
 }
 

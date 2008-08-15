@@ -39,11 +39,7 @@ static void initialise_ftpii() {
     printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     wait_for_network_initialisation();
     initialise_fat();
-    if (initialise_mount_buttons()) {
-        printf("To remount a device, hold 1 on WiiMote #1.\n");
-    } else {
-        printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
-    }
+    printf("To remount a device, hold 1 on WiiMote #1.\n");
 }
 
 static void set_password_from_executable(char *executable) {
@@ -51,6 +47,11 @@ static void set_password_from_executable(char *executable) {
     if (strncasecmp(APP_DIR_PREFIX, dir, strlen(APP_DIR_PREFIX)) == 0) {
         set_ftp_password(dir + strlen(APP_DIR_PREFIX));
     }
+}
+
+static void process_wiimote_events() {
+    u32 pressed = check_wiimote(WPAD_BUTTON_A);
+    if (pressed & WPAD_BUTTON_A) set_reset_flag();
 }
 
 int main(int argc, char **argv) {
@@ -66,7 +67,9 @@ int main(int argc, char **argv) {
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
         process_ftp_events(server);
+        process_wiimote_events();
     }
+
     // TODO: close open files, notify clients, unmount stuff
     printf("\nKTHXBYE\n");
     if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
