@@ -33,6 +33,7 @@ misrepresented as being the original software.
 
 #include "common.h"
 #include "vrt.h"
+#include "ftp.h"
 
 #define FTP_BUFFER_SIZE 512
 #define MAX_CLIENTS 5

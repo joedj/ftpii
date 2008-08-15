@@ -30,6 +30,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 
 #include "common.h"
+#include "vrt.h"
 
 static const u32 VRT_DEVICE_ID = 38744;
 

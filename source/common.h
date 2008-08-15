@@ -32,19 +32,13 @@ misrepresented as being the original software.
 const char *VIRTUAL_PARTITION_ALIASES[4];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
-void initialise_global_mutex();
-void mutex_acquire();
-void mutex_release();
-
-void initialise_fat();
+bool initialise_fat();
 
 u8 reset();
 
 void set_reset_flag();
 
-bool mounted(PARTITION_INTERFACE partition);
-
-u8 initialise_reset_button();
+void initialise_reset_button();
 
 bool hbc_stub();
 
@@ -55,6 +49,8 @@ void die(char *msg);
 u32 check_wiimote(u32 mask);
 
 void initialise_video();
+
+bool mounted(PARTITION_INTERFACE partition);
 
 void process_remount_event();
 
