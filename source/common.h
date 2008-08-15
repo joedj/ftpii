@@ -46,8 +46,6 @@ bool mounted(PARTITION_INTERFACE partition);
 
 u8 initialise_reset_button();
 
-u8 initialise_mount_buttons();
-
 bool hbc_stub();
 
 void quit(s32 status);
@@ -57,6 +55,10 @@ void die(char *msg);
 u32 check_wiimote(u32 mask);
 
 void initialise_video();
+
+void process_remount_event();
+
+void process_device_select_event(u32 pressed);
 
 void wait_for_network_initialisation();
 
