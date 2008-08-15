@@ -28,7 +28,6 @@ homebrew/development environment that it is.
  - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
- - socket timeouts
  - support power button on console and wiimotes
  - use SO_REUSEADDR ?
  - nice UI ;-)
@@ -48,6 +47,10 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20080816 0.0.13 Got rid of threads in favour of mostly-async networking.
+                Attempt to detect whether to exit to loader or system menu (e.g. when loaded from a DVD)
+                Clean up open descriptors before exiting.
+                Added 30 second data connection timeout.
 20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files,
                 allowing Data Management to see uploaded save games (e.g. TP hack).
 20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)
