@@ -35,11 +35,8 @@ static const char *APP_DIR_PREFIX = "ftpii_";
 static void initialise_ftpii() {
     initialise_video();
     WPAD_Init();
-    if (initialise_reset_button()) {
-        printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
-    } else {
-        printf("Unable to start reset thread - hold down the power button to exit.\n");
-    }
+    initialise_reset_button();
+    printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     wait_for_network_initialisation();
     initialise_fat();
     if (initialise_mount_buttons()) {
@@ -56,6 +53,12 @@ static void set_password_from_executable(char *executable) {
     }
 }
 
+static void process_wiimote_events() {
+    switch (check_wiimote(WPAD_BUTTON_A)) {
+        case WPAD_BUTTON_A: set_reset_flag(); break;
+    }
+}
+
 int main(int argc, char **argv) {
     initialise_ftpii();
 
@@ -67,7 +70,12 @@ int main(int argc, char **argv) {
 
     s32 server = create_server(PORT);
     printf("Listening on TCP port %u...\n", PORT);
-    while (1) {
+    while (!reset()) {
         process_ftp_events(server);
+        process_wiimote_events();
     }
+    // TODO: close open files, notify clients, unmount stuff
+    printf("\nKTHXBYE\n");
+    if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    return 0;
 }

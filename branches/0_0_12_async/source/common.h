@@ -38,15 +38,23 @@ void mutex_release();
 
 void initialise_fat();
 
+u8 reset();
+
+void set_reset_flag();
+
 bool mounted(PARTITION_INTERFACE partition);
 
 u8 initialise_reset_button();
 
 u8 initialise_mount_buttons();
 
+bool hbc_stub();
+
 void quit(s32 status);
 
 void die(char *msg);
+
+u32 check_wiimote(u32 mask);
 
 void initialise_video();
 
@@ -59,8 +67,6 @@ s32 net_close_blocking(s32 s);
 s32 create_server(u16 port);
 
 s32 send_exact(s32 s, char *buf, s32 length);
-
-s32 recv_exact(s32 s, char *buf, s32 length);
 
 s32 send_from_file(s32 s, FILE *f);
 
