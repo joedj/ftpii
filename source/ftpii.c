@@ -53,12 +53,6 @@ static void set_password_from_executable(char *executable) {
     }
 }
 
-static void process_wiimote_events() {
-    switch (check_wiimote(WPAD_BUTTON_A)) {
-        case WPAD_BUTTON_A: set_reset_flag(); break;
-    }
-}
-
 int main(int argc, char **argv) {
     initialise_ftpii();
 
@@ -72,7 +66,6 @@ int main(int argc, char **argv) {
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
         process_ftp_events(server);
-        process_wiimote_events();
     }
     // TODO: close open files, notify clients, unmount stuff
     printf("\nKTHXBYE\n");
