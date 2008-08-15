@@ -311,7 +311,6 @@ s32 send_from_file(s32 s, FILE *f) {
     }
     return -EAGAIN;
     end:
-    fclose(f);
     return result;
 }
 
@@ -323,18 +322,15 @@ s32 recv_to_file(s32 s, FILE *f) {
         if (bytes_read < 0) {
             if (bytes_read != -EAGAIN) {
                 printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
-                fclose(f);
             }
             return bytes_read;
         } else if (bytes_read == 0) {
-            fclose(f);
             return 0;
         }
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
             printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-            fclose(f);
             return -1;
         }
     }

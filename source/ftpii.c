@@ -24,6 +24,7 @@ misrepresented as being the original software.
 
 */
 #include <string.h>
+#include <unistd.h>
 #include <wiiuse/wpad.h>
 
 #include "common.h"
@@ -71,9 +72,12 @@ int main(int argc, char **argv) {
         process_ftp_events(server);
         process_wiimote_events();
         process_timer_events();
+        usleep(5000);
     }
+    cleanup_ftp();
+    net_close(server);
+    // TODO: unmount stuff
 
-    // TODO: close open files, notify clients, unmount stuff
     printf("\nKTHXBYE\n");
     if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     return 0;
