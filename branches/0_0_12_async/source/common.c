@@ -66,6 +66,16 @@ u32 check_wiimote(u32 mask) {
     return 0;
 }
 
+u32 check_gamecube(u32 mask) {
+    PAD_ScanPads();
+    u32 pressed = PAD_ButtonsDown(0);
+    if (pressed & mask) {
+        VIDEO_WaitVSync();
+        return pressed;
+    }
+    return 0;
+}
+
 bool mounted(PARTITION_INTERFACE partition) {
     char prefix[] = "fatX:/";
     prefix[3] = partition + '0';
@@ -134,7 +144,7 @@ static u64 mount_timer = 0;
 void process_remount_event() {
     if (mountstate == MOUNTSTATE_START || mountstate == MOUNTSTATE_SELECTDEVICE) {
         mountstate = MOUNTSTATE_SELECTDEVICE;
-        printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
+        printf("\nWhich device would you like to remount? (hold button on controller #1)\n\n");
         printf("             SD Gecko A (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
@@ -189,7 +199,7 @@ void process_device_select_event(u32 pressed) {
             } else {
                 printf("done\n");
             }
-            printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", mount_deviceName);
+            printf("To continue after changing the %s hold B on controller #1 or wait 30 seconds.\n", mount_deviceName);
             mount_timer = gettime() + secs_to_ticks(30);
         }
     }
@@ -217,7 +227,7 @@ void initialise_video() {
 
 static s32 initialise_network() {
     s32 result = -1;
-    while (!_reset && !check_wiimote(WPAD_BUTTON_A) && (result = net_init()) == -EAGAIN);
+    while (!_reset && !check_wiimote(WPAD_BUTTON_A) && !check_gamecube(PAD_BUTTON_A) && (result = net_init()) == -EAGAIN);
     return result;
 }
 
