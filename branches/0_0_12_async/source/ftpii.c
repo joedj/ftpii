@@ -70,6 +70,7 @@ int main(int argc, char **argv) {
     while (!reset()) {
         process_ftp_events(server);
         process_wiimote_events();
+        process_timer_events();
     }
 
     // TODO: close open files, notify clients, unmount stuff

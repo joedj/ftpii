@@ -56,6 +56,8 @@ void process_remount_event();
 
 void process_device_select_event(u32 pressed);
 
+void process_timer_events();
+
 void wait_for_network_initialisation();
 
 s32 set_blocking(s32 s, bool blocking);
