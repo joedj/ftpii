@@ -24,7 +24,6 @@ misrepresented as being the original software.
 #include <errno.h>
 #include <fat.h>
 #include <network.h>
-#include <ogc/lwp_watchdog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +31,8 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
+
+#include "common.h"
 
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
