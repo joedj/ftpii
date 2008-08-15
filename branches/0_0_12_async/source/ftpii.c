@@ -36,7 +36,7 @@ static const char *APP_DIR_PREFIX = "ftpii_";
 static void initialise_ftpii() {
     initialise_video();
     WPAD_Init();
-    initialise_reset_button();
+    initialise_reset_buttons();
     printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
     wait_for_network_initialisation();
     initialise_fat();
@@ -79,6 +79,7 @@ int main(int argc, char **argv) {
     // TODO: unmount stuff
 
     printf("\nKTHXBYE\n");
-    if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
+    else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     return 0;
 }

@@ -49,18 +49,14 @@ bool hbc_stub() {
     return !!*(u32*)0x80001800;
 }
 
-void quit(s32 status) {
-    if (hbc_stub()) {
-        exit(status);
-    } else {
-        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
-    }
-}
-
 void die(char *msg) {
     perror(msg);
     sleep(5);
-    quit(1);
+    if (hbc_stub()) {
+        exit(1);
+    } else {
+        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    }
 }
 
 u32 check_wiimote(u32 mask) {
@@ -104,17 +100,28 @@ bool initialise_fat() {
 }
 
 static volatile u8 _reset = 0;
+static volatile u8 _power = 0;
 
 u8 reset() {
     return _reset;
+}
+
+u8 power() {
+    return _power;
 }
 
 void set_reset_flag() {
     _reset = 1;
 }
 
-void initialise_reset_button() {
+static void set_power_flag() {
+    set_reset_flag();
+    _power = 1;
+}
+
+void initialise_reset_buttons() {
     SYS_SetResetCallback(set_reset_flag);
+    SYS_SetPowerCallback(set_power_flag);
 }
 
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
