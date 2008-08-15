@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <malloc.h>
+#include <ogc/lwp_watchdog.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
@@ -67,6 +68,7 @@ struct client_struct {
     data_connection_callback data_callback;
     void *data_connection_callback_arg;
     void (*data_connection_cleanup)(void *arg);
+    u64 data_connection_timer;
 };
 
 typedef struct client_struct client_t;
@@ -143,12 +145,12 @@ static s32 ftp_TYPE(client_t *client, char *rest) {
     char *args[] = { representation_type, param };
     u32 num_args = split(rest, ' ', 1, args);
     if (num_args == 0) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     } else if ((!strcasecmp("A", representation_type) && (!*param || !strcasecmp("N", param))) ||
                (!strcasecmp("I", representation_type) && num_args == 1)) {
         client->representation_type = *representation_type;
     } else {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     char msg[15];
     sprintf(msg, "Type set to %s.", representation_type);
@@ -159,7 +161,7 @@ static s32 ftp_MODE(client_t *client, char *rest) {
     if (!strcasecmp("S", rest)) {
         return write_reply(client, 200, "Mode S ok.");
     } else {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
 }
 
@@ -200,7 +202,7 @@ static s32 ftp_DELE(client_t *client, char *path) {
 
 static s32 ftp_MKD(client_t *client, char *path) {
     if (!*path) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     if (!vrt_mkdir(client->cwd, path, 0777)) {
         char msg[MAXPATHLEN + 21];
@@ -277,13 +279,13 @@ static s32 ftp_PASV(client_t *client, char *rest) {
 static s32 ftp_PORT(client_t *client, char *portspec) {
     u32 h1, h2, h3, h4, p1, p2;
     if (sscanf(portspec, "%3u,%3u,%3u,%3u,%3u,%3u", &h1, &h2, &h3, &h4, &p1, &p2) < 6) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     char addr_str[44];
     sprintf(addr_str, "%u.%u.%u.%u", h1, h2, h3, h4);
     struct in_addr sin_addr;
     if (!inet_aton(addr_str, &sin_addr)) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     close_passive_socket(client);
     u16 port = ((p1 &0xff) << 8) | (p2 & 0xff);
@@ -293,9 +295,9 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
     return write_reply(client, 200, "PORT command successful.");
 }
 
-typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg, void *cleanup);
+typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg);
 
-static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg, void *cleanup) {
+static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) {
         printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
@@ -315,20 +317,12 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
     }
     
     client->data_socket = data_socket;
-    client->data_connection_connected = false;
-    client->data_callback = callback;
-    client->data_connection_callback_arg = arg;
-    client->data_connection_cleanup = cleanup;
     printf("Attempting to connect to client at %s:%u\n", inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
     return 0;
 }
 
-static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg, void *cleanup) {
+static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
     client->data_socket = client->passive_socket;
-    client->data_connection_connected = false;
-    client->data_callback = callback;
-    client->data_connection_callback_arg = arg;
-    client->data_connection_cleanup = cleanup;
     printf("Waiting for data connections...\n");
     return 0;
 }
@@ -338,9 +332,15 @@ static s32 prepare_data_connection(client_t *client, void *callback, void *arg, 
     if (result >= 0) {
         data_connection_handler handler = prepare_data_connection_active;
         if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
-        result = handler(client, (data_connection_callback)callback, arg, cleanup);
+        result = handler(client, (data_connection_callback)callback, arg);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
+        } else {
+            client->data_connection_connected = false;
+            client->data_callback = callback;
+            client->data_connection_callback_arg = arg;
+            client->data_connection_cleanup = cleanup;
+            client->data_connection_timer = gettime() + secs_to_ticks(30);
         }
     }
     return result;
@@ -419,7 +419,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    
+
     if (client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
         s32 fseek_error = errno;
         fclose(f);
@@ -427,7 +427,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(fseek_error));
     }
     client->restart_marker = 0;
-    
+
     s32 result = prepare_data_connection(client, send_from_file, f, fclose);
     if (result < 0) fclose(f);
     return result;
@@ -462,7 +462,7 @@ static s32 ftp_APPE(client_t *client, char *path) {
 static s32 ftp_REST(client_t *client, char *offset_str) {
     long offset;
     if (sscanf(offset_str, "%li", &offset) < 1 || offset < 0) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     client->restart_marker = offset;
     char msg[FTP_BUFFER_SIZE];
@@ -593,6 +593,7 @@ static void cleanup_data_resources(client_t *client) {
     }
     client->data_connection_callback_arg = NULL;
     client->data_connection_cleanup = NULL;
+    client->data_connection_timer = 0;
 }
 
 static void cleanup_client(client_t *client) {
@@ -659,6 +660,7 @@ static void process_accept_events(s32 server) {
         client->data_callback = NULL;
         client->data_connection_callback_arg = NULL;
         client->data_connection_cleanup = NULL;
+        client->data_connection_timer = 0;
         memcpy(&client->address, &client_address, sizeof(client_address));
         int client_index;
         if (write_reply(client, 220, "ftpii") < 0) {
@@ -702,6 +704,9 @@ static void process_data_events(client_t *client) {
         if (client->data_connection_connected) {
             result = 1;
             printf("Connected to client!  Transferring data...\n");
+        } else if (gettime() > client->data_connection_timer) {
+            result = -1;
+            printf("Timed out waiting for data connection.\n");
         }
     } else {
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
