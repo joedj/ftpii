@@ -36,13 +36,13 @@ bool initialise_fat();
 
 u8 reset();
 
+u8 power();
+
 void set_reset_flag();
 
-void initialise_reset_button();
+void initialise_reset_buttons();
 
 bool hbc_stub();
-
-void quit(s32 status);
 
 void die(char *msg);
 
