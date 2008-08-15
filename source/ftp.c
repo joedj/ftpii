@@ -66,7 +66,7 @@ struct client_struct {
     bool data_connection_connected;
     data_connection_callback data_callback;
     void *data_connection_callback_arg;
-    s32 data_connection_callback_arg_type; // -1 = other, 0 = file, 1 = dir
+    void (*data_connection_cleanup)(void *arg);
 };
 
 typedef struct client_struct client_t;
@@ -74,7 +74,7 @@ typedef struct client_struct client_t;
 static client_t *clients[MAX_CLIENTS] = { NULL };
 
 void set_ftp_password(char *new_password) {
-    if (password) free((char *)password);
+    if (password) free(password);
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
         if (!password) die("Unable to allocate memory for password, exiting");
@@ -293,9 +293,9 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
     return write_reply(client, 200, "PORT command successful.");
 }
 
-typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg, s32 argtype);
+typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg, void *cleanup);
 
-static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg, s32 argtype) {
+static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg, void *cleanup) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) {
         printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
@@ -318,27 +318,27 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
     client->data_connection_connected = false;
     client->data_callback = callback;
     client->data_connection_callback_arg = arg;
-    client->data_connection_callback_arg_type = argtype;
+    client->data_connection_cleanup = cleanup;
     printf("Attempting to connect to client at %s:%u\n", inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
     return 0;
 }
 
-static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg, s32 argtype) {
+static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg, void *cleanup) {
     client->data_socket = client->passive_socket;
     client->data_connection_connected = false;
     client->data_callback = callback;
     client->data_connection_callback_arg = arg;
-    client->data_connection_callback_arg_type = argtype;
+    client->data_connection_cleanup = cleanup;
     printf("Waiting for data connections...\n");
     return 0;
 }
 
-static s32 prepare_data_connection(client_t *client, void *callback, void *arg, s32 argtype) {
+static s32 prepare_data_connection(client_t *client, void *callback, void *arg, void *cleanup) {
     s32 result = write_reply(client, 150, "Transferring data.");
     if (result >= 0) {
         data_connection_handler handler = prepare_data_connection_active;
         if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
-        result = handler(client, (data_connection_callback)callback, arg, argtype);
+        result = handler(client, (data_connection_callback)callback, arg, cleanup);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         }
@@ -386,7 +386,7 @@ static s32 ftp_NLST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = prepare_data_connection(client, send_nlst, dir, 1);
+    s32 result = prepare_data_connection(client, send_nlst, dir, vrt_dirclose);
     if (result < 0) vrt_dirclose(dir);
     return result;
 }
@@ -409,7 +409,7 @@ static s32 ftp_LIST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = prepare_data_connection(client, send_list, dir, 1);
+    s32 result = prepare_data_connection(client, send_list, dir, vrt_dirclose);
     if (result < 0) vrt_dirclose(dir);
     return result;
 }
@@ -428,7 +428,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     }
     client->restart_marker = 0;
     
-    s32 result = prepare_data_connection(client, send_from_file, f, 0);
+    s32 result = prepare_data_connection(client, send_from_file, f, fclose);
     if (result < 0) fclose(f);
     return result;
 }
@@ -437,7 +437,7 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = prepare_data_connection(client, recv_to_file, f, 0);
+    s32 result = prepare_data_connection(client, recv_to_file, f, fclose);
     if (result < 0) fclose(f);
     return result;
 }
@@ -588,12 +588,11 @@ static void cleanup_data_resources(client_t *client) {
     client->data_socket = -1;
     client->data_connection_connected = false;
     client->data_callback = NULL;
-    if (client->data_connection_callback_arg) {
-        if (client->data_connection_callback_arg_type == 0) fclose(client->data_connection_callback_arg);
-        else if (client->data_connection_callback_arg_type == 1) vrt_dirclose(client->data_connection_callback_arg);
-        client->data_connection_callback_arg = NULL;
+    if (client->data_connection_cleanup) {
+        client->data_connection_cleanup(client->data_connection_callback_arg);
     }
-    client->data_connection_callback_arg_type = -1;
+    client->data_connection_callback_arg = NULL;
+    client->data_connection_cleanup = NULL;
 }
 
 static void cleanup_client(client_t *client) {
@@ -659,7 +658,7 @@ static void process_accept_events(s32 server) {
         client->data_connection_connected = false;
         client->data_callback = NULL;
         client->data_connection_callback_arg = NULL;
-        client->data_connection_callback_arg_type = -1;
+        client->data_connection_cleanup = NULL;
         memcpy(&client->address, &client_address, sizeof(client_address));
         int client_index;
         if (write_reply(client, 220, "ftpii") < 0) {
