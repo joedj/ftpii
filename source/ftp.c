@@ -470,7 +470,7 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
 
 static s32 ftp_SITE_LOADER(client_t *client, char *rest) {
     s32 result = write_reply(client, 200, "Exiting to loader.");
-    quit(0);
+    set_reset_flag();
     return result;
 }
 
@@ -763,22 +763,17 @@ static void process_control_events(client_t *client) {
 }
 
 void process_ftp_events(s32 server) {
-    // printf("processing accept events\n");
     process_accept_events(server);
-
     int client_index;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
         client_t *client = clients[client_index];
         if (client) {
             if (client->data_callback) {
-                // printf("processing data events\n");
                 process_data_events(client);
             } else {
-                // printf("processing control events\n");
                 process_control_events(client);
             }
         }
     }
-    
     usleep(5000);
 }

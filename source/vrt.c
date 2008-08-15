@@ -238,6 +238,7 @@ static char *vrt_getcwd(char *buf, size_t size) {
     return buf;
 }
 
+// This function is not thread-safe
 int vrt_chdir(char *cwd, char *path) {
     char *real_path = to_real_path(cwd, path);
     if (!real_path) return -1;

@@ -43,9 +43,12 @@ static const u32 CACHE_PAGES = 8192;
 
 static volatile bool fatInitState = false;
 
+bool hbc_stub() {
+    return !!*(u32*)0x80001800;
+}
+
 void quit(s32 status) {
-    u32 hbc_stub = *(u32*)0x80001800;
-    if (hbc_stub) {
+    if (hbc_stub()) {
         exit(status);
     } else {
         SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
@@ -56,6 +59,13 @@ void die(char *msg) {
     perror(msg);
     sleep(5);
     quit(1);
+}
+
+u32 check_wiimote(u32 mask) {
+    WPAD_ScanPads();
+    u32 pressed = WPAD_ButtonsDown(0);
+    if (pressed & mask) return pressed;
+    return 0;
 }
 
 bool mounted(PARTITION_INTERFACE partition) {
@@ -91,20 +101,18 @@ bool initialise_fat() {
     return fatInitState;
 }
 
-static volatile u8 reset = 0;
+static volatile u8 _reset = 0;
 
-static void reset_called() {
-    reset = 1;
+u8 reset() {
+    return _reset;
 }
 
-static void *run_reset_thread(void *arg) {
-    while (!reset && !(WPAD_ButtonsHeld(0) & WPAD_BUTTON_A)) {
-        sleep(1);
-        WPAD_ScanPads();
-    }
-    printf("\nKTHXBYE\n");
-    quit(0);
-    return NULL;
+void set_reset_flag() {
+    _reset = 1;
+}
+
+void initialise_reset_button() {
+    SYS_SetResetCallback(set_reset_flag);
 }
 
 static void remount(PARTITION_INTERFACE partition, char *deviceName) {
@@ -177,13 +185,6 @@ static void *run_mount_handle_thread(void *arg) {
     }
 }
 
-u8 initialise_reset_button() {
-    lwp_t reset_thread;
-    s32 result = LWP_CreateThread(&reset_thread, run_reset_thread, NULL, NULL, 0, 80);
-    if (result == 0) SYS_SetResetCallback(reset_called);
-    return !result;
-}
-
 u8 initialise_mount_buttons() {
     lwp_t mount_thread;
     return !LWP_CreateThread(&mount_thread, run_mount_handle_thread, NULL, NULL, 0, 80);
@@ -205,8 +206,8 @@ void initialise_video() {
 }
 
 static s32 initialise_network() {
-    s32 result;
-    while ((result = net_init()) == -EAGAIN);
+    s32 result = -1;
+    while (!_reset && (result = net_init()) == -EAGAIN);
     return result;
 }
 
@@ -283,15 +284,6 @@ static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transfe
 
 s32 send_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, (transferrer_type)net_write);
-}
-
-/*
-    Attempts to read exactly length bytes into buffer.
-    Returns negative if a read error or EOF occurrs before length bytes.  buffer may have been modified.
-    Otherwise, returns length, which will be equai to the total number of bytes read into buffer.
-*/
-inline s32 recv_exact(s32 s, char *buf, s32 length) {
-    return transfer_exact(s, buf, length, net_read);
 }
 
 s32 send_from_file(s32 s, FILE *f) {
@@ -387,8 +379,9 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
 
 /*
     Returns a copy of path up to the last '/' character,
-    If path does not contain '/', return "".
+    If path does not contain '/', returns "".
     Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
+    This function is not thread-safe.
 */
 char *dirname(char *path) {
     static char result[MAXPATHLEN];
@@ -406,7 +399,7 @@ char *dirname(char *path) {
 
 /*
     Returns a pointer into path, starting after the right-most '/' character.
-    If path does not contain '/', return path.
+    If path does not contain '/', returns path.
 */
 char *basename(char *path) {
     s32 i;
