@@ -31,7 +31,6 @@ homebrew/development environment that it is.
  - support wiimote power button
  - use SO_REUSEADDR ?
  - nice UI ;-)
- - gamecube controller support
 
 
 *** CONTACT ***
@@ -52,6 +51,7 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
                 Clean up open descriptors before exiting.
                 Added 30 second data connection timeout.
                 Added support for power button.
+                Added GameCube controller support.
 20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files,
                 allowing Data Management to see uploaded save games (e.g. TP hack).
 20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)

@@ -48,6 +48,8 @@ void die(char *msg);
 
 u32 check_wiimote(u32 mask);
 
+u32 check_gamecube(u32 mask);
+
 void initialise_video();
 
 bool mounted(PARTITION_INTERFACE partition);
