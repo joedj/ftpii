@@ -24,6 +24,7 @@ misrepresented as being the original software.
 #include <errno.h>
 #include <fat.h>
 #include <network.h>
+#include <ogc/lwp_watchdog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,22 +122,24 @@ typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVI
 static mountstate_t mountstate = MOUNTSTATE_START;
 static PARTITION_INTERFACE mount_partition;
 static char *mount_deviceName = NULL;
+static u64 mount_timer = 0;
 
 void process_remount_event() {
     if (mountstate == MOUNTSTATE_START || mountstate == MOUNTSTATE_SELECTDEVICE) {
+        mountstate = MOUNTSTATE_SELECTDEVICE;
         printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
         printf("             SD Gecko A (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
         printf("                  |\n");
         printf("             SD Gecko B (Down)\n");
-        mountstate = MOUNTSTATE_SELECTDEVICE;
     } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
+        mount_timer = 0;
+        mountstate = MOUNTSTATE_START;
         bool success = false;
         if (!fatInitState) {
             if (!initialise_fat()) {
                 printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
-                mountstate = MOUNTSTATE_START;
                 return;
             }
             if (mounted(mount_partition)) success = true;
@@ -150,7 +153,6 @@ void process_remount_event() {
         } else {
             printf("Error mounting %s.\n", mount_deviceName);
         }
-        mountstate = MOUNTSTATE_START;
     }
 }
 
@@ -171,6 +173,7 @@ void process_device_select_event(u32 pressed) {
             mount_deviceName = "SD Gecko in slot B";
         }
         if (mount_deviceName) {
+            mountstate = MOUNTSTATE_WAITFORDEVICE;
             printf("Unmounting %s ...", mount_deviceName);
             fflush(stdout);
             if (!fatUnmount(mount_partition)) {
@@ -180,9 +183,14 @@ void process_device_select_event(u32 pressed) {
                 printf("done\n");
             }
             printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", mount_deviceName);
-            mountstate = MOUNTSTATE_WAITFORDEVICE;
+            mount_timer = gettime() + secs_to_ticks(30);
         }
     }
+}
+
+void process_timer_events() {
+    u64 now = gettime();
+    if (mount_timer && now > mount_timer) process_remount_event();
 }
 
 static void *xfb = NULL;
