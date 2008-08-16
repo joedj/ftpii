@@ -4,7 +4,7 @@ ftpii is an FTP server for the Nintendo Wii.
 *** USAGE ***
 
 Copy ftpii/ to /apps/ on an SD-card and use The Homebrew Channel,
-or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, etc...).
+or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, ISO etc...).
 
 To specify a password via The Homebrew Channel, rename the apps/ftpii directory to apps/ftpii_YourPassword.
 To specify a password via wiiload, pass an argument e.g. wiiload boot.elf YourPassword.
