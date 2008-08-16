@@ -4,7 +4,7 @@ ftpii is an FTP server for the Nintendo Wii.
 *** USAGE ***
 
 Copy ftpii/ to /apps/ on an SD-card and use The Homebrew Channel,
-or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, etc...).
+or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, ISO etc...).
 
 To specify a password via The Homebrew Channel, rename the apps/ftpii directory to apps/ftpii_YourPassword.
 To specify a password via wiiload, pass an argument e.g. wiiload boot.elf YourPassword.
@@ -28,9 +28,8 @@ homebrew/development environment that it is.
  - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
- - socket timeouts
+ - support wiimote power button
  - use SO_REUSEADDR ?
- - async networking
  - nice UI ;-)
 
 
@@ -47,6 +46,12 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20080816 0.0.13 Replaced threads with mostly-async networking.
+                Attempt to detect whether to exit to loader or system menu (e.g. when loaded from a DVD).
+                Clean up open descriptors before exiting.
+                Added 30 second data connection timeout.
+                Added support for power button.
+                Added GameCube controller support.
 20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files,
                 allowing Data Management to see uploaded save games (e.g. TP hack).
 20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)

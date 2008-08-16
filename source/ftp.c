@@ -25,44 +25,58 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <malloc.h>
+#include <ogc/lwp_watchdog.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
 
 #include "common.h"
 #include "vrt.h"
+#include "ftp.h"
 
-#define FTP_BUFFER_SIZE 512
+#define FTP_BUFFER_SIZE 1024
+#define MAX_CLIENTS 5
 
 static const u16 SRC_PORT = 20;
 static const s32 EQUIT = 696969;
-static const u8 MAX_CLIENTS = 5;
 static const char *CRLF = "\r\n";
 static const u32 CRLF_LENGTH = 2;
 
-static volatile u8 num_clients = 0;
-static volatile u16 passive_port = 1024;
-static volatile char *password = NULL;
+static u8 num_clients = 0;
+static u16 passive_port = 1024;
+static char *password = NULL;
 
 extern u32 net_gethostip();
+
+typedef s32 (*data_connection_callback)(s32 data_socket, void *arg);
 
 struct client_struct {
     s32 socket;
     char representation_type;
     s32 passive_socket;
+    s32 data_socket;
     char cwd[MAXPATHLEN];
     char pending_rename[MAXPATHLEN];
     long restart_marker;
     struct sockaddr_in address;
     bool authenticated;
+    char buf[FTP_BUFFER_SIZE];
+    s32 offset;
+    bool data_connection_connected;
+    data_connection_callback data_callback;
+    void *data_connection_callback_arg;
+    void (*data_connection_cleanup)(void *arg);
+    u64 data_connection_timer;
 };
 
 typedef struct client_struct client_t;
 
+static client_t *clients[MAX_CLIENTS] = { NULL };
+
 void set_ftp_password(char *new_password) {
-    mutex_acquire();
-    if (password) free((char *)password);
+    if (password) free(password);
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
         if (!password) die("Unable to allocate memory for password, exiting");
@@ -70,14 +84,10 @@ void set_ftp_password(char *new_password) {
     } else {
         password = NULL;
     }
-    mutex_release();
 }
 
 static bool compare_ftp_password(char *password_attempt) {
-    mutex_acquire();
-    bool result = !password || !strcmp((char *)password, password_attempt);
-    mutex_release();
-    return result;
+    return !password || !strcmp((char *)password, password_attempt);
 }
 
 /*
@@ -89,12 +99,12 @@ static s32 write_reply(client_t *client, u16 code, char *msg) {
     if (msgbuf == NULL) return -ENOMEM;
     sprintf(msgbuf, "%u %s\r\n", code, msg);
     printf("Wrote reply: %s", msgbuf);
-    return write_exact(client->socket, msgbuf, msglen);
+    return send_exact(client->socket, msgbuf, msglen);
 }
 
 static void close_passive_socket(client_t *client) {
     if (client->passive_socket >= 0) {
-        net_close(client->passive_socket);
+        net_close_blocking(client->passive_socket);
         client->passive_socket = -1;
     }
 }
@@ -135,12 +145,12 @@ static s32 ftp_TYPE(client_t *client, char *rest) {
     char *args[] = { representation_type, param };
     u32 num_args = split(rest, ' ', 1, args);
     if (num_args == 0) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     } else if ((!strcasecmp("A", representation_type) && (!*param || !strcasecmp("N", param))) ||
                (!strcasecmp("I", representation_type) && num_args == 1)) {
         client->representation_type = *representation_type;
     } else {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     char msg[15];
     sprintf(msg, "Type set to %s.", representation_type);
@@ -151,7 +161,7 @@ static s32 ftp_MODE(client_t *client, char *rest) {
     if (!strcasecmp("S", rest)) {
         return write_reply(client, 200, "Mode S ok.");
     } else {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
 }
 
@@ -192,7 +202,7 @@ static s32 ftp_DELE(client_t *client, char *path) {
 
 static s32 ftp_MKD(client_t *client, char *path) {
     if (!*path) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     if (!vrt_mkdir(client->cwd, path, 0777)) {
         char msg[MAXPATHLEN + 21];
@@ -243,12 +253,11 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     if (client->passive_socket < 0) {
         return write_reply(client, 520, "Unable to create listening socket.");
     }
+    set_blocking(client->passive_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    mutex_acquire();
     bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
-    mutex_release();
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
@@ -270,13 +279,13 @@ static s32 ftp_PASV(client_t *client, char *rest) {
 static s32 ftp_PORT(client_t *client, char *portspec) {
     u32 h1, h2, h3, h4, p1, p2;
     if (sscanf(portspec, "%3u,%3u,%3u,%3u,%3u,%3u", &h1, &h2, &h3, &h4, &p1, &p2) < 6) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     char addr_str[44];
     sprintf(addr_str, "%u.%u.%u.%u", h1, h2, h3, h4);
     struct in_addr sin_addr;
     if (!inet_aton(addr_str, &sin_addr)) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     close_passive_socket(client);
     u16 port = ((p1 &0xff) << 8) | (p2 & 0xff);
@@ -286,16 +295,15 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
     return write_reply(client, 200, "PORT command successful.");
 }
 
-typedef s32 (*data_connection_callback)(s32 data_socket, void *arg);
 typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg);
 
-static s32 do_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
+static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) {
         printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
         return data_socket;
     }
-    printf("Attempting to connect to client at %s:%u\n", inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
+    set_blocking(data_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
@@ -307,56 +315,32 @@ static s32 do_data_connection_active(client_t *client, data_connection_callback 
         net_close(data_socket);
         return result;
     }
-    if ((result = net_connect(data_socket, (struct sockaddr *)&client->address, sizeof(client->address))) < 0) {
-        printf("Unable to connect to client: [%i] %s\n", -result, strerror(-result));
-        net_close(data_socket);
-        return result;
-    }
-    printf("Connected to client!  Transferring data...\n");
-
-    result = callback(data_socket, arg);
-
-    net_close(data_socket);
-    if (result < 0) {
-        printf("Error occurred while transferring data...\n");
-    } else {
-        printf("Finished transferring data!\n");
-    }
-    return result;
+    
+    client->data_socket = data_socket;
+    printf("Attempting to connect to client at %s:%u\n", inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
+    return 0;
 }
 
-static s32 do_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
-    struct sockaddr_in data_peer_address;
-    socklen_t addrlen = sizeof(data_peer_address);
+static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
+    client->data_socket = client->passive_socket;
     printf("Waiting for data connections...\n");
-    s32 data_socket = net_accept(client->passive_socket, (struct sockaddr *)&data_peer_address ,&addrlen);
-    if (data_socket < 0) {
-        printf("DEBUG: Unable to accept data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
-        return data_socket;
-    }
-    printf("Connected to client!  Transferring data...\n");
-
-    s32 result = callback(data_socket, arg);
-
-    net_close(data_socket);
-    if (result < 0) {
-        printf("Error occurred while transferring data...\n");
-    } else {
-        printf("Finished transferring data!\n");
-    }
-    return result;
+    return 0;
 }
 
-static s32 do_data_connection(client_t *client, void *callback, void *arg) {
+static s32 prepare_data_connection(client_t *client, void *callback, void *arg, void *cleanup) {
     s32 result = write_reply(client, 150, "Transferring data.");
     if (result >= 0) {
-        data_connection_handler handler = do_data_connection_active;
-        if (client->passive_socket >= 0) handler = do_data_connection_passive;
+        data_connection_handler handler = prepare_data_connection_active;
+        if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
         result = handler(client, (data_connection_callback)callback, arg);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         } else {
-            result = write_reply(client, 226, "Closing data connection, transfer successful.");
+            client->data_connection_connected = false;
+            client->data_callback = callback;
+            client->data_connection_callback_arg = arg;
+            client->data_connection_cleanup = cleanup;
+            client->data_connection_timer = gettime() + secs_to_ticks(30);
         }
     }
     return result;
@@ -371,11 +355,11 @@ static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
         filename[end_index] = CRLF[0];
         filename[end_index + 1] = CRLF[1];
         filename[end_index + 2] = '\0';
-        if ((result = write_exact(data_socket, filename, strlen(filename))) < 0) {
+        if ((result = send_exact(data_socket, filename, strlen(filename))) < 0) {
             break;
         }
     }
-    return result;
+    return result < 0 ? result : 0;
 }
 
 static s32 send_list(s32 data_socket, DIR_ITER *dir) {
@@ -384,12 +368,12 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1900 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
-        if ((result = write_exact(data_socket, line, strlen(line))) < 0) {
+        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
+        if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
     }
-    return result;
+    return result < 0 ? result : 0;
 }
 
 static s32 ftp_NLST(client_t *client, char *path) {
@@ -402,9 +386,8 @@ static s32 ftp_NLST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = do_data_connection(client, send_nlst, dir);
-
-    vrt_dirclose(dir);
+    s32 result = prepare_data_connection(client, send_nlst, dir, vrt_dirclose);
+    if (result < 0) vrt_dirclose(dir);
     return result;
 }
 
@@ -426,9 +409,8 @@ static s32 ftp_LIST(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    s32 result = do_data_connection(client, send_list, dir);
-
-    vrt_dirclose(dir);
+    s32 result = prepare_data_connection(client, send_list, dir, vrt_dirclose);
+    if (result < 0) vrt_dirclose(dir);
     return result;
 }
 
@@ -437,7 +419,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    
+
     if (client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
         s32 fseek_error = errno;
         fclose(f);
@@ -445,10 +427,9 @@ static s32 ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(fseek_error));
     }
     client->restart_marker = 0;
-    
-    s32 result = do_data_connection(client, write_from_file, f);
 
-    fclose(f);
+    s32 result = prepare_data_connection(client, send_from_file, f, fclose);
+    if (result < 0) fclose(f);
     return result;
 }
 
@@ -456,8 +437,8 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
-    s32 result = do_data_connection(client, read_to_file, f);
-    fclose(f);
+    s32 result = prepare_data_connection(client, recv_to_file, f, fclose);
+    if (result < 0) fclose(f);
     return result;
 }
 
@@ -481,7 +462,7 @@ static s32 ftp_APPE(client_t *client, char *path) {
 static s32 ftp_REST(client_t *client, char *offset_str) {
     long offset;
     if (sscanf(offset_str, "%li", &offset) < 1 || offset < 0) {
-        return write_reply(client, 501, "Syntax error in parameters or arguments.");
+        return write_reply(client, 501, "Syntax error in parameters.");
     }
     client->restart_marker = offset;
     char msg[FTP_BUFFER_SIZE];
@@ -490,8 +471,9 @@ static s32 ftp_REST(client_t *client, char *offset_str) {
 }
 
 static s32 ftp_SITE_LOADER(client_t *client, char *rest) {
-    write_reply(client, 200, "Exiting to loader.");
-    exit(0);
+    s32 result = write_reply(client, 200, "Exiting to loader.");
+    set_reset_flag();
+    return result;
 }
 
 static s32 ftp_SITE_CLEAR(client_t *client, char *rest) {
@@ -599,41 +581,183 @@ static s32 process_command(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, commands, handlers);
 }
 
-static void *process_connection(void *client_ptr) {
-    client_t *client = client_ptr;
-    if (write_reply(client, 220, "ftpii") < 0) {
-        printf("Error writing greeting.\n");
-        goto recv_loop_end;
+static void cleanup_data_resources(client_t *client) {
+    if (client->data_socket >= 0 && client->data_socket != client->passive_socket) {
+        net_close_blocking(client->data_socket);
     }
-    
-    char buf[FTP_BUFFER_SIZE];
-    s32 offset = 0;
+    client->data_socket = -1;
+    client->data_connection_connected = false;
+    client->data_callback = NULL;
+    if (client->data_connection_cleanup) {
+        client->data_connection_cleanup(client->data_connection_callback_arg);
+    }
+    client->data_connection_callback_arg = NULL;
+    client->data_connection_cleanup = NULL;
+    client->data_connection_timer = 0;
+}
+
+static void cleanup_client(client_t *client) {
+    net_close_blocking(client->socket);
+    cleanup_data_resources(client);
+    close_passive_socket(client);
+    int client_index;
+    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+        if (clients[client_index] == client) {
+            clients[client_index] = NULL;
+            break;
+        }
+    }
+    free(client);
+    num_clients--;
+    printf("Client disconnected.\n");
+}
+
+void cleanup_ftp() {
+    int client_index;
+    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+        client_t *client = clients[client_index];
+        if (client) {
+            write_reply(client, 421, "Service not available, closing control connection.");
+            cleanup_client(client);
+        }
+    }
+}
+
+static void process_accept_events(s32 server) {
+    s32 peer;
+    struct sockaddr_in client_address;
+    socklen_t addrlen = sizeof(client_address);
+    while ((peer = net_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -EAGAIN) {
+        if (peer < 0) {
+            net_close(server);
+            die("Error accepting connection");
+        }
+
+        printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
+
+        if (num_clients == MAX_CLIENTS) {
+            printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
+            net_close(peer);
+            return;
+        }
+
+        client_t *client = malloc(sizeof(client_t));
+        if (!client) {
+            printf("Could not allocate memory for client state, not accepting client.\n");
+            net_close(peer);
+            return;
+        }
+        client->socket = peer;
+        client->representation_type = 'A';
+        client->passive_socket = -1;
+        client->data_socket = -1;
+        strcpy(client->cwd, "/");
+        *client->pending_rename = '\0';
+        client->restart_marker = 0;
+        client->authenticated = false;
+        client->offset = 0;
+        client->data_connection_connected = false;
+        client->data_callback = NULL;
+        client->data_connection_callback_arg = NULL;
+        client->data_connection_cleanup = NULL;
+        client->data_connection_timer = 0;
+        memcpy(&client->address, &client_address, sizeof(client_address));
+        int client_index;
+        if (write_reply(client, 220, "ftpii") < 0) {
+            printf("Error writing greeting.\n");
+            net_close_blocking(peer);
+            free(client);
+        } else {
+            for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+                if (!clients[client_index]) {
+                    clients[client_index] = client;
+                    break;
+                }
+            }
+            num_clients++;
+        }
+    }
+}
+
+static void process_data_events(client_t *client) {
+    s32 result;
+    if (!client->data_connection_connected) {
+        if (client->passive_socket >= 0) {
+            struct sockaddr_in data_peer_address;
+            socklen_t addrlen = sizeof(data_peer_address);
+            result = net_accept(client->passive_socket, (struct sockaddr *)&data_peer_address ,&addrlen);
+            if (result < 0 && result != -EAGAIN) {
+                printf("DEBUG: Unable to accept data socket: [%i] %s\n", -result, strerror(-result));
+            } else if (result >= 0) {
+                client->data_socket = result;
+                client->data_connection_connected = true;
+            }
+        } else {
+            if ((result = net_connect(client->data_socket, (struct sockaddr *)&client->address, sizeof(client->address))) < 0) {
+                if (result == -EINPROGRESS) result = -EAGAIN;
+                if (result != -EAGAIN && result != -EISCONN) printf("Unable to connect to client: [%i] %s\n", -result, strerror(-result));
+            }
+             if (result >= 0 || result == -EISCONN) {
+                client->data_connection_connected = true;
+            }
+        }
+        if (client->data_connection_connected) {
+            result = 1;
+            printf("Connected to client!  Transferring data...\n");
+        } else if (gettime() > client->data_connection_timer) {
+            result = -1;
+            printf("Timed out waiting for data connection.\n");
+        }
+    } else {
+        result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
+    }
+
+    if (result <= 0 && result != -EAGAIN) {
+        cleanup_data_resources(client);
+        if (result < 0) {
+            result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
+        } else {
+            result = write_reply(client, 226, "Closing data connection, transfer successful.");
+        }
+        if (result < 0) {
+            cleanup_client(client);
+        }
+    }
+}
+
+static void process_control_events(client_t *client) {
     s32 bytes_read;
-    while (offset < (FTP_BUFFER_SIZE - 1)) {
-        char *offset_buf = buf + offset;
-        if ((bytes_read = net_read(client->socket, offset_buf, FTP_BUFFER_SIZE - 1 - offset)) < 0) {
-            printf("Read error %i occurred, closing client.\n", bytes_read);
-            goto recv_loop_end;
+    while (client->offset < (FTP_BUFFER_SIZE - 1)) {
+        if (client->data_callback) {
+            return;
+        }
+        char *offset_buf = client->buf + client->offset;
+        if ((bytes_read = net_read(client->socket, offset_buf, FTP_BUFFER_SIZE - 1 - client->offset)) < 0) {
+            if (bytes_read != -EAGAIN) {
+                printf("Read error %i occurred, closing client.\n", bytes_read);
+                goto recv_loop_end;
+            }
+            return;
         } else if (bytes_read == 0) {
             goto recv_loop_end; // EOF from client
         }
-        offset += bytes_read;
-        buf[offset] = '\0';
-        
-        if (strchr(offset_buf, '\0') != (buf + offset)) {
+        client->offset += bytes_read;
+        client->buf[client->offset] = '\0';
+    
+        if (strchr(offset_buf, '\0') != (client->buf + client->offset)) {
             printf("Received a null byte from client, closing connection ;-)\n"); // i have decided this isn't allowed =P
             goto recv_loop_end;
         }
 
         char *next;
         char *end;
-        for (next = buf; (end = strstr(next, CRLF)); next = end + CRLF_LENGTH) {
+        for (next = client->buf; (end = strstr(next, CRLF)) && !client->data_callback; next = end + CRLF_LENGTH) {
             *end = '\0';
             if (strchr(next, '\n')) {
                 printf("Received a line-feed from client without preceding carriage return, closing connection ;-)\n"); // i have decided this isn't allowed =P
                 goto recv_loop_end;
             }
-            
+        
             if (*next) {
                 s32 result;
                 if ((result = process_command(client, next)) < 0) {
@@ -643,66 +767,33 @@ static void *process_connection(void *client_ptr) {
                     goto recv_loop_end;
                 }
             }
-            
-        }
         
-        if (next != buf) { // some lines were processed
-            offset = strlen(next);
-            char tmp_buf[offset];
-            memcpy(tmp_buf, next, offset);
-            memcpy(buf, tmp_buf, offset);
+        }
+    
+        if (next != client->buf) { // some lines were processed
+            client->offset = strlen(next);
+            char tmp_buf[client->offset];
+            memcpy(tmp_buf, next, client->offset);
+            memcpy(client->buf, tmp_buf, client->offset);
         }
     }
     printf("Received line longer than %u bytes, closing client.\n", FTP_BUFFER_SIZE - 1);
 
     recv_loop_end:
-
-    net_close(client->socket);
-    close_passive_socket(client);
-    free(client);
-
-    printf("Done doing stuffs!\n");
-
-    mutex_acquire();
-    num_clients--;
-    mutex_release();
-
-    return NULL;
+    cleanup_client(client);
 }
 
-void accept_ftp_client(s32 server) {
-    struct sockaddr_in client_address;
-    s32 peer = accept_peer(server, &client_address);
-
-    if (num_clients == MAX_CLIENTS) {
-        printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
-        net_close(peer);
-        return;
-    }
-
-    client_t *client = malloc(sizeof(client_t));
-    if (!client) {
-        printf("Could not allocate memory for client state, not accepting client.\n");
-        net_close(peer);
-        return;
-    }
-    client->socket = peer;
-    client->representation_type = 'A';
-    client->passive_socket = -1;
-    strcpy(client->cwd, "/");
-    *client->pending_rename = '\0';
-    client->restart_marker = 0;
-    client->authenticated = false;
-    memcpy(&client->address, &client_address, sizeof(client_address));
-
-    lwp_t client_thread;
-    if (LWP_CreateThread(&client_thread, process_connection, client, NULL, 0, 80)) {
-        printf("Error creating client thread, not accepting client.\n");
-        net_close(peer);
-        free(client);
-    } else {
-        mutex_acquire();
-        num_clients++;
-        mutex_release();
+void process_ftp_events(s32 server) {
+    process_accept_events(server);
+    int client_index;
+    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+        client_t *client = clients[client_index];
+        if (client) {
+            if (client->data_callback) {
+                process_data_events(client);
+            } else {
+                process_control_events(client);
+            }
+        }
     }
 }

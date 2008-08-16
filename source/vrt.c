@@ -30,6 +30,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 
 #include "common.h"
+#include "vrt.h"
 
 static const u32 VRT_DEVICE_ID = 38744;
 
@@ -238,6 +239,7 @@ static char *vrt_getcwd(char *buf, size_t size) {
     return buf;
 }
 
+// This function is not thread-safe
 int vrt_chdir(char *cwd, char *path) {
     char *real_path = to_real_path(cwd, path);
     if (!real_path) return -1;
@@ -246,10 +248,8 @@ int vrt_chdir(char *cwd, char *path) {
         return 0;
     }
     free(real_path);
-    mutex_acquire();
     int result = (int)with_virtual_path(cwd, chdir, path, -1, NULL);
     if (!result) vrt_getcwd(cwd, MAXPATHLEN); // TODO: error checking
-    mutex_release();
     return result;
 }
 

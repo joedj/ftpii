@@ -24,6 +24,7 @@ misrepresented as being the original software.
 
 */
 #include <string.h>
+#include <unistd.h>
 #include <wiiuse/wpad.h>
 
 #include "common.h"
@@ -34,26 +35,40 @@ static const char *APP_DIR_PREFIX = "ftpii_";
 
 static void initialise_ftpii() {
     initialise_video();
-    initialise_global_mutex();
+    PAD_Init();
     WPAD_Init();
-    if (initialise_reset_button()) {
-        printf("To exit, hold A on WiiMote #1 or press the reset button.\n");
-    } else {
-        printf("Unable to start reset thread - hold down the power button to exit.\n");
-    }
+    initialise_reset_buttons();
+    printf("To exit, hold A on controller #1 or press the reset button.\n");
     wait_for_network_initialisation();
     initialise_fat();
-    if (initialise_mount_buttons()) {
-        printf("To remount a device, hold 1 on WiiMote #1.\n");
-    } else {
-        printf("Unable to start mount thread - remounting on-the-fly will not work.\n");
-    }
+    printf("To remount a device, hold B on controller #1.\n");
 }
 
 static void set_password_from_executable(char *executable) {
     char *dir = basename(dirname(executable));
     if (strncasecmp(APP_DIR_PREFIX, dir, strlen(APP_DIR_PREFIX)) == 0) {
         set_ftp_password(dir + strlen(APP_DIR_PREFIX));
+    }
+}
+
+static void process_wiimote_events() {
+    u32 pressed = check_wiimote(WPAD_BUTTON_A | WPAD_BUTTON_B | WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN);
+    if (pressed & WPAD_BUTTON_A) set_reset_flag();
+    else if (pressed & WPAD_BUTTON_B) process_remount_event();
+    else if (pressed & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN)) process_device_select_event(pressed);
+}
+
+static void process_gamecube_events() {
+    u32 pressed = check_gamecube(PAD_BUTTON_A | PAD_BUTTON_B | PAD_BUTTON_LEFT | PAD_BUTTON_RIGHT | PAD_BUTTON_UP | PAD_BUTTON_DOWN);
+    if (pressed & PAD_BUTTON_A) set_reset_flag();
+    else if (pressed & PAD_BUTTON_B) process_remount_event();
+    else if (pressed & (PAD_BUTTON_LEFT | PAD_BUTTON_RIGHT | PAD_BUTTON_UP | PAD_BUTTON_DOWN)) {
+        u32 wpad_pressed = 0;
+        if (pressed & PAD_BUTTON_LEFT) wpad_pressed |= WPAD_BUTTON_LEFT;
+        if (pressed & PAD_BUTTON_RIGHT) wpad_pressed |= WPAD_BUTTON_RIGHT;
+        if (pressed & PAD_BUTTON_UP) wpad_pressed |= WPAD_BUTTON_UP;
+        if (pressed & PAD_BUTTON_DOWN) wpad_pressed |= WPAD_BUTTON_DOWN;
+        process_device_select_event(wpad_pressed);
     }
 }
 
@@ -67,8 +82,20 @@ int main(int argc, char **argv) {
     }
 
     s32 server = create_server(PORT);
-    printf("\nListening on TCP port %u...\n", PORT);
-    while (1) {
-        accept_ftp_client(server);
+    printf("Listening on TCP port %u...\n", PORT);
+    while (!reset()) {
+        process_ftp_events(server);
+        process_wiimote_events();
+        process_gamecube_events();
+        process_timer_events();
+        usleep(5000);
     }
+    cleanup_ftp();
+    net_close(server);
+    // TODO: unmount stuff
+
+    printf("\nKTHXBYE\n");
+    if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
+    else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    return 0;
 }
