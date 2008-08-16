@@ -8,7 +8,7 @@ cd $FTPII_VERSION && \
 make clean && \
 rm -rf *.dol *.elf && \
 make && \
-rm -rf build && \
+rm -rf build patches && \
 mkdir ftpii && \
 mv hbc/meta.xml ftpii && \
 mv hbc/icon.png ftpii && \

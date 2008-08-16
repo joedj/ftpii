@@ -32,35 +32,47 @@ misrepresented as being the original software.
 const char *VIRTUAL_PARTITION_ALIASES[4];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
-void initialise_global_mutex();
-void mutex_acquire();
-void mutex_release();
+bool initialise_fat();
 
-void initialise_fat();
+u8 reset();
 
-bool mounted(PARTITION_INTERFACE partition);
+u8 power();
 
-u8 initialise_reset_button();
+void set_reset_flag();
 
-u8 initialise_mount_buttons();
+void initialise_reset_buttons();
+
+bool hbc_stub();
 
 void die(char *msg);
 
+u32 check_wiimote(u32 mask);
+
+u32 check_gamecube(u32 mask);
+
 void initialise_video();
+
+bool mounted(PARTITION_INTERFACE partition);
+
+void process_remount_event();
+
+void process_device_select_event(u32 pressed);
+
+void process_timer_events();
 
 void wait_for_network_initialisation();
 
+s32 set_blocking(s32 s, bool blocking);
+
+s32 net_close_blocking(s32 s);
+
 s32 create_server(u16 port);
 
-s32 accept_peer(s32 server, struct sockaddr_in *addr);
+s32 send_exact(s32 s, char *buf, s32 length);
 
-s32 write_exact(s32 s, char *buf, s32 length);
+s32 send_from_file(s32 s, FILE *f);
 
-s32 write_from_file(s32 s, FILE *f);
-
-s32 read_exact(s32 s, char *buf, s32 length);
-
-s32 read_to_file(s32 s, FILE *f);
+s32 recv_to_file(s32 s, FILE *f);
 
 u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 

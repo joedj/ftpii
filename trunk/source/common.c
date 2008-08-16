@@ -24,41 +24,56 @@ misrepresented as being the original software.
 #include <errno.h>
 #include <fat.h>
 #include <network.h>
+#include <ogc/lwp_watchdog.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
+#include <sys/fcntl.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
 
-#define NET_BUFFER_SIZE 1024
-#define FREAD_BUFFER_SIZE 1024
+#include "common.h"
+
+#define NET_BUFFER_SIZE 32768
+#define FREAD_BUFFER_SIZE 32768
 
 const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
 
-static mutex_t global_mutex;
-
 static volatile bool fatInitState = false;
+
+bool hbc_stub() {
+    return !!*(u32*)0x80001800;
+}
 
 void die(char *msg) {
     perror(msg);
     sleep(5);
-    exit(1);
+    if (hbc_stub()) {
+        exit(1);
+    } else {
+        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    }
 }
 
-void initialise_global_mutex() {
-    if (LWP_MutexInit(&global_mutex, true)) die("Could not initialise global mutex, exiting");
+u32 check_wiimote(u32 mask) {
+    WPAD_ScanPads();
+    u32 pressed = WPAD_ButtonsDown(0);
+    if (pressed & mask) return pressed;
+    return 0;
 }
 
-void mutex_acquire() {
-    while (LWP_MutexLock(global_mutex));
-}
-
-void mutex_release() {
-    while (LWP_MutexUnlock(global_mutex));
+u32 check_gamecube(u32 mask) {
+    PAD_ScanPads();
+    u32 pressed = PAD_ButtonsDown(0);
+    if (pressed & mask) {
+        VIDEO_WaitVSync();
+        return pressed;
+    }
+    return 0;
 }
 
 bool mounted(PARTITION_INTERFACE partition) {
@@ -94,101 +109,105 @@ bool initialise_fat() {
     return fatInitState;
 }
 
-static volatile u8 reset = 0;
+static volatile u8 _reset = 0;
+static volatile u8 _power = 0;
 
-static void reset_called() {
-    reset = 1;
+u8 reset() {
+    return _reset;
 }
 
-static void *run_reset_thread(void *arg) {
-    while (!reset && !(WPAD_ButtonsHeld(0) & WPAD_BUTTON_A)) {
-        sleep(1);
-        WPAD_ScanPads();
-    }
-    printf("\nKTHXBYE\n");
-    exit(0);
+u8 power() {
+    return _power;
 }
 
-static void remount(PARTITION_INTERFACE partition, char *deviceName) {
-    printf("Unmounting %s ...", deviceName);
-    if (!fatUnmount(partition)) {
-        printf("failure\n");
-    } else {
-        printf("done\n");
-    }
-
-    printf("To continue after changing the %s hold 1 on WiiMote #1 or wait 30 seconds.\n", deviceName);
-    int timer = 30;
-    do {
-        sleep(1);
-        timer--;
-    } while (timer > 0 && !(WPAD_ButtonsDown(0) & WPAD_BUTTON_1));
-    WPAD_Flush(0);
-
-    bool success = false;
-    if (!fatInitState) {
-        if (!initialise_fat()) {
-            printf("Unable to initialise FAT subsystem, unable to mount %s\n", deviceName);
-            return;
-        }
-        if (mounted(partition)) success = true;
-    } else if (fatMountNormalInterface(partition, CACHE_PAGES)) {
-        success = true;
-        fat_enable_readahead(partition);
-    }
-
-    if (success) {
-        printf("Success: %s is mounted.\n", deviceName);
-    } else {
-        printf("Error mounting %s.\n", deviceName);
-    }
+void set_reset_flag() {
+    _reset = 1;
 }
 
-static void *run_mount_handle_thread(void *arg) {
-    while (true) {
+static void set_power_flag() {
+    set_reset_flag();
+    _power = 1;
+}
 
-        while (!(WPAD_ButtonsDown(0) & WPAD_BUTTON_1)) {
-            sleep(1);   
-        }
-        WPAD_Flush(0);
+void initialise_reset_buttons() {
+    SYS_SetResetCallback(set_reset_flag);
+    SYS_SetPowerCallback(set_power_flag);
+}
 
-        printf("\nWhich device would you like to remount? (hold button on WiiMote #1)\n\n");
+typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
+
+static mountstate_t mountstate = MOUNTSTATE_START;
+static PARTITION_INTERFACE mount_partition;
+static char *mount_deviceName = NULL;
+static u64 mount_timer = 0;
+
+void process_remount_event() {
+    if (mountstate == MOUNTSTATE_START || mountstate == MOUNTSTATE_SELECTDEVICE) {
+        mountstate = MOUNTSTATE_SELECTDEVICE;
+        printf("\nWhich device would you like to remount? (hold button on controller #1)\n\n");
         printf("             SD Gecko A (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
         printf("                  |\n");
         printf("             SD Gecko B (Down)\n");
-
-        while (!(WPAD_ButtonsDown(0) & (WPAD_BUTTON_LEFT | WPAD_BUTTON_RIGHT | WPAD_BUTTON_UP | WPAD_BUTTON_DOWN))) {
-            sleep(1);
+    } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
+        mount_timer = 0;
+        mountstate = MOUNTSTATE_START;
+        bool success = false;
+        if (!fatInitState) {
+            if (!initialise_fat()) {
+                printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
+                return;
+            }
+            if (mounted(mount_partition)) success = true;
+        } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
+            success = true;
+            fat_enable_readahead(mount_partition);
         }
-        u32 wpad = WPAD_ButtonsHeld(0);
-        WPAD_Flush(0);
 
-        if (wpad & WPAD_BUTTON_LEFT) {
-            remount(PI_INTERNAL_SD, "Front SD");
-        } else if (wpad & WPAD_BUTTON_RIGHT) {
-            remount(PI_USBSTORAGE, "USB storage");
-        } else if (wpad & WPAD_BUTTON_UP) {
-            remount(PI_SDGECKO_A, "SD Gecko in slot A");
-        } else if (wpad & WPAD_BUTTON_DOWN) {
-            remount(PI_SDGECKO_B, "SD Gecko in slot B");
+        if (success) {
+            printf("Success: %s is mounted.\n", mount_deviceName);
+        } else {
+            printf("Error mounting %s.\n", mount_deviceName);
         }
-        
-        sleep(1);
     }
 }
 
-u8 initialise_reset_button() {
-    lwp_t reset_thread;
-    s32 result = LWP_CreateThread(&reset_thread, run_reset_thread, NULL, NULL, 0, 80);
-    if (result == 0) SYS_SetResetCallback(reset_called);
-    return !result;
+void process_device_select_event(u32 pressed) {
+    if (mountstate == MOUNTSTATE_SELECTDEVICE) {
+        mount_deviceName = NULL;
+        if (pressed & WPAD_BUTTON_LEFT) {
+            mount_partition = PI_INTERNAL_SD;
+            mount_deviceName = "Front SD";
+        } else if (pressed & WPAD_BUTTON_RIGHT) {
+            mount_partition = PI_USBSTORAGE;
+            mount_deviceName = "USB storage";
+        } else if (pressed & WPAD_BUTTON_UP) {
+            mount_partition = PI_SDGECKO_A;
+            mount_deviceName = "SD Gecko in slot A";
+        } else if (pressed & WPAD_BUTTON_DOWN) {
+            mount_partition = PI_SDGECKO_B;
+            mount_deviceName = "SD Gecko in slot B";
+        }
+        if (mount_deviceName) {
+            mountstate = MOUNTSTATE_WAITFORDEVICE;
+            printf("Unmounting %s ...", mount_deviceName);
+            fflush(stdout);
+            if (!fatUnmount(mount_partition)) {
+                // TODO: try unsafe unmount stuff
+                printf("failure\n");
+            } else {
+                printf("done\n");
+            }
+            printf("To continue after changing the %s hold B on controller #1 or wait 30 seconds.\n", mount_deviceName);
+            mount_timer = gettime() + secs_to_ticks(30);
+        }
+    }
 }
 
-u8 initialise_mount_buttons() {
-    lwp_t mount_thread;
-    return !LWP_CreateThread(&mount_thread, run_mount_handle_thread, NULL, NULL, 0, 80);
+void process_timer_events() {
+    u64 now = gettime();
+    if (mount_timer && now > mount_timer) process_remount_event();
 }
 
 static void *xfb = NULL;
@@ -203,14 +222,12 @@ void initialise_video() {
     VIDEO_SetNextFramebuffer(xfb);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
-    VIDEO_WaitVSync(); // XXX: do i need this? why? where else?
-    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync(); // XXX: no idea why this is done - came from template.c. do i need to do this every time i call VIDEO_WaitVSync() ??
     printf("\x1b[2;0H");
 }
 
 static s32 initialise_network() {
-    s32 result;
-    while ((result = net_init()) == -EAGAIN);
+    s32 result = -1;
+    while (!_reset && !check_wiimote(WPAD_BUTTON_A) && !check_gamecube(PAD_BUTTON_A) && (result = net_init()) == -EAGAIN);
     return result;
 }
 
@@ -225,9 +242,25 @@ void wait_for_network_initialisation() {
     }
 }
 
+s32 set_blocking(s32 s, bool blocking) {
+    s32 flags;
+    if ((flags = net_fcntl(s, F_GETFL, 0)) < 0) {
+        printf("DEBUG: set_blocking(%i, %i): Unable to get flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
+    } else if ((flags = net_fcntl(s, F_SETFL, blocking ? (flags&~4) : (flags|4))) < 0) {
+        printf("DEBUG: set_blocking(%i, %i): Unable to set flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
+    }
+    return flags;
+}
+
+s32 net_close_blocking(s32 s) {
+    set_blocking(s, true);
+    return net_close(s);
+}
+
 s32 create_server(u16 port) {
     s32 server = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (server < 0) die("Error creating socket, exiting");
+    set_blocking(server, false);
 
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
@@ -247,75 +280,66 @@ s32 create_server(u16 port) {
     return server;
 }
 
-s32 accept_peer(s32 server, struct sockaddr_in *addr) {
-    s32 peer;
-    socklen_t addrlen = sizeof(*addr);
-    if ((peer = net_accept(server, (struct sockaddr *)addr, &addrlen)) < 0) {
-        net_close(server);
-        die("Error accepting connection");
-    }
-    printf("\nAccepted connection from %s!\n", inet_ntoa(addr->sin_addr));
-    return peer;
-}
-
 typedef s32 (*transferrer_type)(s32 s, void *mem, s32 len);
-inline static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transferrer) {
-    s32 bytes_transferred = 0;
+static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transferrer) {
+    s32 result = 0;
     s32 remaining = length;
+    set_blocking(s, true);
     while (remaining) {
-        if ((bytes_transferred = transferrer(s, buf, remaining > NET_BUFFER_SIZE ? NET_BUFFER_SIZE : remaining)) > 0) {
+        s32 bytes_transferred = transferrer(s, buf, MIN(remaining, NET_BUFFER_SIZE));
+        if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
         } else if (bytes_transferred < 0) {
-            return bytes_transferred;
+            result = bytes_transferred;
+            break;
         } else {
-            return -ENODATA;
+            result = -ENODATA;
+            break;
         }
     }
-    return 0;
+    set_blocking(s, false);
+    return result;
 }
 
-inline s32 write_exact(s32 s, char *buf, s32 length) {
+s32 send_exact(s32 s, char *buf, s32 length) {
     return transfer_exact(s, buf, length, (transferrer_type)net_write);
 }
 
-s32 write_from_file(s32 s, FILE *f) {
+s32 send_from_file(s32 s, FILE *f) {
     char buf[FREAD_BUFFER_SIZE];
-    s32 bytes_read, bytes_written;
-    while (1) {
-        bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
-        if (bytes_read > 0) {
-            if ((bytes_written = write_exact(s, buf, bytes_read)) < 0) {
-                printf("DEBUG: write_from_file() net_write error: [%i] %s\n", -bytes_written, strerror(-bytes_written));
-                return bytes_written;
-            }
-        }
-        if (bytes_read < FREAD_BUFFER_SIZE) {
-            s32 result = -!feof(f);
-            if (result < 0) {
-                printf("DEBUG: write_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-            }
-            return result;
+    s32 bytes_read;
+    s32 result = 0;
+
+    bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
+    if (bytes_read > 0) {
+        result = send_exact(s, buf, bytes_read);
+        if (result < 0) {
+            printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+            goto end;
         }
     }
+    if (bytes_read < FREAD_BUFFER_SIZE) {
+        result = -!feof(f);
+        if (result < 0) {
+            printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+        }
+        goto end;
+    }
+    return -EAGAIN;
+    end:
+    return result;
 }
 
-/*
-    Attempts to read exactly length bytes into buffer.
-    Returns negative if a read error or EOF occurrs before length bytes.  buffer may have been modified.
-    Otherwise, returns length, which will be equai to the total number of bytes read into buffer.
-*/
-inline s32 read_exact(s32 s, char *buf, s32 length) {
-    return transfer_exact(s, buf, length, net_read);
-}
-
-s32 read_to_file(s32 s, FILE *f) {
+s32 recv_to_file(s32 s, FILE *f) {
     char buf[NET_BUFFER_SIZE];
     s32 bytes_read;
     while (1) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
-            printf("DEBUG: read_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+            if (bytes_read != -EAGAIN) {
+                printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+            }
             return bytes_read;
         } else if (bytes_read == 0) {
             return 0;
@@ -323,7 +347,7 @@ s32 read_to_file(s32 s, FILE *f) {
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
-            printf("DEBUG: read_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
             return -1;
         }
     }
@@ -371,8 +395,9 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
 
 /*
     Returns a copy of path up to the last '/' character,
-    If path does not contain '/', return "".
+    If path does not contain '/', returns "".
     Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
+    This function is not thread-safe.
 */
 char *dirname(char *path) {
     static char result[MAXPATHLEN];
@@ -390,7 +415,7 @@ char *dirname(char *path) {
 
 /*
     Returns a pointer into path, starting after the right-most '/' character.
-    If path does not contain '/', return path.
+    If path does not contain '/', returns path.
 */
 char *basename(char *path) {
     s32 i;
