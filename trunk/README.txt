@@ -46,6 +46,8 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20080918 0.0.14 boot.elf rebuilt with latest libfat CVS to fix delete corruption bug
+                and speed up opening large files (thanks rodries!)
 20080816 0.0.13 Replaced threads with mostly-async networking.
                 Attempt to detect whether to exit to loader or system menu (e.g. when loaded from a DVD).
                 Clean up open descriptors before exiting.

@@ -2,8 +2,8 @@
 <app version="1">
   <name>ftpii</name>
   <coder>joedj, srg</coder>
-  <version>0.0.13</version>
-  <release_date>20080816000000</release_date>
+  <version>0.0.14</version>
+  <release_date>20080918000000</release_date>
   <short_description>An FTP server</short_description> 
   <long_description>ftpii is an FTP server.
 
