@@ -479,27 +479,6 @@ diff -u -w -u -w -r1.4 common.h
  #else
  #  ifdef NDS
     #include <nds/ndstypes.h>
-Index: source/directory.c
-===================================================================
-RCS file: /cvsroot/devkitpro/libfat/source/directory.c,v
-retrieving revision 1.14
-diff -u -w -u -w -r1.14 directory.c
---- source/directory.c	2 Aug 2008 04:22:47 -0000	1.14
-+++ source/directory.c	15 Aug 2008 12:42:29 -0000
-@@ -636,13 +636,6 @@
- 	}
- 
- 	if (found && !notFound) {
--		if (partition->filesysType == FS_FAT32 && (entry->entryData[DIR_ENTRY_attributes] & ATTRIB_DIR) &&
--			_FAT_directory_entryGetCluster (entry->entryData) == CLUSTER_ROOT) 
--		{
--			// On FAT32 it should specify an actual cluster for the root entry,
--			// not cluster 0 as on FAT16
--			_FAT_directory_getRootEntry (partition, entry);
--		}
- 		return true;
- 	} else {
- 		return false;
 Index: source/disc.h
 ===================================================================
 RCS file: /cvsroot/devkitpro/libfat/source/disc.h,v
