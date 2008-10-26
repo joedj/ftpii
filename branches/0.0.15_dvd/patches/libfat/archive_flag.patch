@@ -1,0 +1,20 @@
+This patch makes libfat set the archive attribute on newly created files,
+which makes save games compatible with Wii Data Management.
+
+Index: source/fatfile.c
+===================================================================
+RCS file: /cvsroot/devkitpro/libfat/source/fatfile.c,v
+retrieving revision 1.14
+diff -u -w -u -w -r1.14 fatfile.c
+--- source/fatfile.c    23 May 2008 19:37:46 -0000      1.14
++++ source/fatfile.c    15 Aug 2008 12:42:29 -0000
+@@ -183,6 +183,9 @@
+                        u16_to_u8array (dirEntry.entryData, DIR_ENTRY_cTime, _FAT_filetime_getTimeFromRTC());
+                        u16_to_u8array (dirEntry.entryData, DIR_ENTRY_cDate, _FAT_filetime_getDateFromRTC());
+
++                       // Set the archive attribute (Data Management requires that savegames have this set)
++                       dirEntry.entryData[DIR_ENTRY_attributes] = ATTRIB_ARCH;
++
+                        if (!_FAT_directory_addEntry (partition, &dirEntry, dirCluster)) {
+                                _FAT_unlock();
+                                r->_errno = ENOSPC;
