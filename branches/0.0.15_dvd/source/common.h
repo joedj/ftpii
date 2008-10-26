@@ -56,6 +56,10 @@ void to_real_prefix(char *prefix, int virtual_device_index);
 
 bool mounted(int virtual_device_index);
 
+u8 iso9660_mountState();
+
+void set_iso9660_mountState(u8 state);
+
 void process_remount_event();
 
 void process_device_select_event(u32 pressed);

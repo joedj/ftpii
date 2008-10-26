@@ -35,12 +35,9 @@ misrepresented as being the original software.
 static const u16 PORT = 21;
 static const char *APP_DIR_PREFIX = "ftpii_";
 
-static bool iso9660_mounted = false;
-
 static void initialise_ftpii() {
     DI_Init();
     initialise_video();
-    DI_Mount();
     PAD_Init();
     WPAD_Init();
     initialise_reset_buttons();
@@ -80,17 +77,16 @@ static void process_gamecube_events() {
 }
 
 static void process_dvd_events() {
-    if (!iso9660_mounted) {
+    if (iso9660_mountState() == 1) {
         int status = DI_GetStatus();
         if (status & DVD_INIT) return;
         if (status & DVD_READY) {
-            iso9660_mounted = true;
+            set_iso9660_mountState(2);
             printf("Drive is ready!\n");
     		if (status & DVD_D0)
     			printf("Currently in D0 mode\n");
     		if (status & DVD_A8)
     			printf("Currently in A8 mode\n");
-            ISO9660_Mount();
         }
     }
 }
@@ -118,9 +114,7 @@ int main(int argc, char **argv) {
     net_close(server);
     // TODO: unmount stuff
 
-    if (!iso9660_mounted) {
-        printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
-    }
+    if (iso9660_mountState() == 1) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     DI_Close();
 
     printf("\nKTHXBYE\n");
