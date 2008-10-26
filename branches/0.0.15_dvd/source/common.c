@@ -233,20 +233,24 @@ void initialise_video() {
     VIDEO_Flush();
 }
 
-static s32 initialise_network() {
-    s32 result = -1;
-    while (!_reset && !check_wiimote(WPAD_BUTTON_A) && !check_gamecube(PAD_BUTTON_A) && (result = net_init()) == -EAGAIN);
-    return result;
+static bool check_reset_synchronous() {
+    return _reset || check_wiimote(WPAD_BUTTON_A) || check_gamecube(PAD_BUTTON_A);
 }
 
-void wait_for_network_initialisation() {
+void initialise_network() {
     printf("Waiting for network to initialise...\n");
-    if (initialise_network() >= 0) {
-        char myIP[16];
-        if (if_config(myIP, NULL, NULL, true) < 0) die("Error reading IP address, exiting");
-        printf("Network initialised.  Wii IP address: %s\n", myIP);
-    } else {
-        die("Unable to initialise network, exiting");
+    s32 result = -1;
+    while (!check_reset_synchronous() && result < 0) {
+        while (!check_reset_synchronous() && (result = net_init()) == -EAGAIN);
+        if (result < 0) printf("net_init() failed: [%i] %s, retrying...\n", result, strerror(-result));
+    }
+    if (result >= 0) {
+        u32 ip = 0;
+        do {
+            ip = net_gethostip();
+            if (!ip) printf("net_gethostip() failed, retrying...\n");
+        } while (!check_reset_synchronous() && !ip);
+        if (ip) printf("Network initialised.  Wii IP address: %s\n", inet_ntoa(*(struct in_addr *)&ip));
     }
 }
 

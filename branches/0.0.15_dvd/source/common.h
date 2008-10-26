@@ -62,7 +62,7 @@ void process_device_select_event(u32 pressed);
 
 void process_timer_events();
 
-void wait_for_network_initialisation();
+void initialise_network();
 
 s32 set_blocking(s32 s, bool blocking);
 
@@ -80,5 +80,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
 char *dirname(char *path);
 char *basename(char *path);
+
+extern u32 net_gethostip();
 
 #endif /* _COMMON_H_ */

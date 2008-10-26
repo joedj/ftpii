@@ -46,6 +46,9 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20081026 0.0.15 boot.dol rebuilt with latest libogc git to add SDHC support. (thanks svpe!)
+                Released as boot.dol instead of boot.elf for Homebrew Channel beta9 compatibility.
+                Network initialisation is more reliable - now retries forever on net_init or net_gethostip failure.
 20080918 0.0.14 boot.elf rebuilt with latest libfat CVS to fix delete corruption bug
                 and speed up opening large files (thanks rodries!)
 20080816 0.0.13 Replaced threads with mostly-async networking.
