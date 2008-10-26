@@ -48,8 +48,6 @@ static u8 num_clients = 0;
 static u16 passive_port = 1024;
 static char *password = NULL;
 
-extern u32 net_gethostip();
-
 typedef s32 (*data_connection_callback)(s32 data_socket, void *arg);
 
 struct client_struct {
