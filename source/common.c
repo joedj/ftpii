@@ -21,6 +21,7 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <di/di.h>
 #include <errno.h>
 #include <fat.h>
 #include <network.h>
@@ -43,7 +44,8 @@ const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / s
 
 static const u32 CACHE_PAGES = 8192;
 
-static volatile bool fatInitState = false;
+static bool fatInitState = false;
+static u8 _iso9660_mountState = 0;
 
 bool hbc_stub() {
     return !!*(u32*)0x80001800;
@@ -93,6 +95,14 @@ bool mounted(int virtual_device_index) {
         return true;
     }
     return false;
+}
+
+u8 iso9660_mountState() {
+    return _iso9660_mountState;
+}
+
+void set_iso9660_mountState(u8 state) {
+    _iso9660_mountState = state;
 }
 
 static void fat_enable_readahead(PARTITION_INTERFACE partition) {
@@ -162,6 +172,11 @@ void process_remount_event() {
         mount_timer = 0;
         mountstate = MOUNTSTATE_START;
         bool success = false;
+        if (mount_partition == PI_SDGECKO_A) { // dvd
+            _iso9660_mountState = 1;
+            DI_Mount();
+            printf("Mounting DVD...\n");
+        }
         if (!fatInitState) {
             if (!initialise_fat()) {
                 printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
