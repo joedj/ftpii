@@ -23,6 +23,8 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <di/di.h>
+#include <iso/iso.h>
 #include <string.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
@@ -33,14 +35,19 @@ misrepresented as being the original software.
 static const u16 PORT = 21;
 static const char *APP_DIR_PREFIX = "ftpii_";
 
+static bool iso9660_mounted = false;
+
 static void initialise_ftpii() {
+    DI_Init();
     initialise_video();
+    DI_Mount();
     PAD_Init();
     WPAD_Init();
     initialise_reset_buttons();
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     wait_for_network_initialisation();
     initialise_fat();
+    ISO9660_Init();
     printf("To remount a device, hold B on controller #1.\n");
 }
 
@@ -72,6 +79,22 @@ static void process_gamecube_events() {
     }
 }
 
+static void process_dvd_events() {
+    if (!iso9660_mounted) {
+        int status = DI_GetStatus();
+        if (status & DVD_INIT) return;
+        if (status & DVD_READY) {
+            iso9660_mounted = true;
+            printf("Drive is ready!\n");
+    		if (status & DVD_D0)
+    			printf("Currently in D0 mode\n");
+    		if (status & DVD_A8)
+    			printf("Currently in A8 mode\n");
+            ISO9660_Mount();
+        }
+    }
+}
+
 int main(int argc, char **argv) {
     initialise_ftpii();
 
@@ -84,6 +107,7 @@ int main(int argc, char **argv) {
     s32 server = create_server(PORT);
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
+        process_dvd_events();
         process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
@@ -93,6 +117,11 @@ int main(int argc, char **argv) {
     cleanup_ftp();
     net_close(server);
     // TODO: unmount stuff
+
+    if (!iso9660_mounted) {
+        printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
+    }
+    DI_Close();
 
     printf("\nKTHXBYE\n");
     if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);

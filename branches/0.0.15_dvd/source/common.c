@@ -38,7 +38,7 @@ misrepresented as being the original software.
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
 
-const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb", "/dvd" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
@@ -76,9 +76,17 @@ u32 check_gamecube(u32 mask) {
     return 0;
 }
 
-bool mounted(PARTITION_INTERFACE partition) {
-    char prefix[] = "fatX:/";
-    prefix[3] = partition + '0';
+void to_real_prefix(char *prefix, int virtual_device_index) {
+    if (virtual_device_index == (MAX_VIRTUAL_PARTITION_ALIASES - 1)) { // "/dvd"
+        sprintf(prefix, "dvd:/");
+    } else {
+        sprintf(prefix, "fat%i:/", virtual_device_index + 1);
+    }
+}
+
+bool mounted(int virtual_device_index) {
+    char prefix[7];
+    to_real_prefix(prefix, virtual_device_index);
     DIR_ITER *dir = diropen(prefix);
     if (dir) {
         dirclose(dir);
@@ -94,8 +102,8 @@ static void fat_enable_readahead(PARTITION_INTERFACE partition) {
 
 static void fat_enable_readahead_all() {
     PARTITION_INTERFACE i;
-    for (i = 1; i <= MAX_VIRTUAL_PARTITION_ALIASES; i++) {
-        if (mounted(i)) fat_enable_readahead(i);
+    for (i = 1; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (mounted(i - 1)) fat_enable_readahead(i);
     }
 }
 
@@ -159,7 +167,7 @@ void process_remount_event() {
                 printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
                 return;
             }
-            if (mounted(mount_partition)) success = true;
+            if (mounted(mount_partition - 1)) success = true;
         } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
             success = true;
             fat_enable_readahead(mount_partition);
@@ -217,12 +225,12 @@ void initialise_video() {
     VIDEO_Init();
     rmode = VIDEO_GetPreferredMode(NULL);
     xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-    console_init(xfb, 20, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
     VIDEO_Configure(rmode);
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
+    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
     VIDEO_SetNextFramebuffer(xfb);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
-    printf("\x1b[2;0H");
 }
 
 static s32 initialise_network() {
