@@ -6,13 +6,13 @@ cd ..
 cp -R ftpii $FTPII_VERSION && \
 cd $FTPII_VERSION && \
 make clean && \
-rm -rf *.dol *.elf && \
+rm -f *.dol *.elf && \
 make && \
 rm -rf build patches && \
 mkdir ftpii && \
 mv hbc/meta.xml ftpii && \
 mv hbc/icon.png ftpii && \
-cp $FTPII_VERSION.elf ftpii/boot.elf && \
+cp $FTPII_VERSION.dol ftpii/boot.dol && \
 rm -f *.elf *.dol && \
 rm -rf hbc && \
 (find . -name .svn | xargs rm -rf) && \

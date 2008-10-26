@@ -45,7 +45,7 @@ static void initialise_ftpii() {
     WPAD_Init();
     initialise_reset_buttons();
     printf("To exit, hold A on controller #1 or press the reset button.\n");
-    wait_for_network_initialisation();
+    initialise_network();
     initialise_fat();
     ISO9660_Init();
     printf("To remount a device, hold B on controller #1.\n");
