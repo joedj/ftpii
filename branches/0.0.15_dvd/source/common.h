@@ -56,9 +56,9 @@ void to_real_prefix(char *prefix, int virtual_device_index);
 
 bool mounted(int virtual_device_index);
 
-u8 iso9660_mountState();
+bool dvd_mountWait();
 
-void set_iso9660_mountState(u8 state);
+void set_dvd_mountWait(bool state);
 
 void process_remount_event();
 

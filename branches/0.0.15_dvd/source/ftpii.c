@@ -44,7 +44,6 @@ static void initialise_ftpii() {
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     initialise_network();
     initialise_fat();
-    ISO9660_Init();
     printf("To remount a device, hold B on controller #1.\n");
 }
 
@@ -77,17 +76,10 @@ static void process_gamecube_events() {
 }
 
 static void process_dvd_events() {
-    if (iso9660_mountState() == 1) {
-        int status = DI_GetStatus();
-        if (status & DVD_INIT) return;
-        if (status & DVD_READY) {
-            set_iso9660_mountState(2);
-            printf("Drive is ready!\n");
-    		if (status & DVD_D0)
-    			printf("Currently in D0 mode\n");
-    		if (status & DVD_A8)
-    			printf("Currently in A8 mode\n");
-        }
+    if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
+        set_dvd_mountWait(false);
+        if (ISO9660_Mount()) printf("Success: DVD is mounted.\n");
+        else printf("Error mounting DVD.\n");
     }
 }
 
@@ -114,7 +106,7 @@ int main(int argc, char **argv) {
     net_close(server);
     // TODO: unmount stuff
 
-    if (iso9660_mountState() == 1) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
+    if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     DI_Close();
 
     printf("\nKTHXBYE\n");

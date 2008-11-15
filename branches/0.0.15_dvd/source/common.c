@@ -24,6 +24,7 @@ misrepresented as being the original software.
 #include <di/di.h>
 #include <errno.h>
 #include <fat.h>
+#include <iso/iso.h>
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <stdio.h>
@@ -45,7 +46,7 @@ const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / s
 static const u32 CACHE_PAGES = 8192;
 
 static bool fatInitState = false;
-static u8 _iso9660_mountState = 0;
+static bool _dvd_mountWait = false;
 
 bool hbc_stub() {
     return !!*(u32*)0x80001800;
@@ -79,7 +80,7 @@ u32 check_gamecube(u32 mask) {
 }
 
 void to_real_prefix(char *prefix, int virtual_device_index) {
-    if (virtual_device_index == (MAX_VIRTUAL_PARTITION_ALIASES - 1)) { // "/dvd"
+    if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
         sprintf(prefix, "dvd:/");
     } else {
         sprintf(prefix, "fat%i:/", virtual_device_index + 1);
@@ -97,12 +98,12 @@ bool mounted(int virtual_device_index) {
     return false;
 }
 
-u8 iso9660_mountState() {
-    return _iso9660_mountState;
+bool dvd_mountWait() {
+    return _dvd_mountWait;
 }
 
-void set_iso9660_mountState(u8 state) {
-    _iso9660_mountState = state;
+void set_dvd_mountWait(bool state) {
+    _dvd_mountWait = state;
 }
 
 static void fat_enable_readahead(PARTITION_INTERFACE partition) {
@@ -167,31 +168,28 @@ void process_remount_event() {
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
         printf("                  |\n");
-        printf("             SD Gecko B (Down)\n");
+        printf("             DVD (Down)\n");
     } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
         mount_timer = 0;
         mountstate = MOUNTSTATE_START;
-        bool success = false;
-        if (mount_partition == PI_SDGECKO_A) { // dvd
-            _iso9660_mountState = 1;
+        if (mount_partition == PI_CUSTOM) {
+            set_dvd_mountWait(true);
             DI_Mount();
             printf("Mounting DVD...\n");
-        }
-        if (!fatInitState) {
-            if (!initialise_fat()) {
-                printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
-                return;
-            }
-            if (mounted(mount_partition - 1)) success = true;
-        } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
-            success = true;
-            fat_enable_readahead(mount_partition);
-        }
-
-        if (success) {
-            printf("Success: %s is mounted.\n", mount_deviceName);
         } else {
-            printf("Error mounting %s.\n", mount_deviceName);
+            bool success = false;
+            if (!fatInitState) {
+                if (!initialise_fat()) {
+                    printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
+                    return;
+                }
+                if (mounted(mount_partition - 1)) success = true;
+            } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
+                success = true;
+                fat_enable_readahead(mount_partition);
+            }
+            if (success) printf("Success: %s is mounted.\n", mount_deviceName);
+            else printf("Error mounting %s.\n", mount_deviceName);
         }
     }
 }
@@ -209,18 +207,22 @@ void process_device_select_event(u32 pressed) {
             mount_partition = PI_SDGECKO_A;
             mount_deviceName = "SD Gecko in slot A";
         } else if (pressed & WPAD_BUTTON_DOWN) {
-            mount_partition = PI_SDGECKO_B;
-            mount_deviceName = "SD Gecko in slot B";
+            mount_partition = PI_CUSTOM;
+            mount_deviceName = "DVD";
         }
         if (mount_deviceName) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
-            printf("Unmounting %s ...", mount_deviceName);
-            fflush(stdout);
-            if (!fatUnmount(mount_partition)) {
-                // TODO: try unsafe unmount stuff
-                printf("failure\n");
+            printf("Unmounting %s...", mount_deviceName);
+            if (mount_partition == PI_CUSTOM) {
+                printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
             } else {
-                printf("done\n");
+                fflush(stdout);
+                if (!fatUnmount(mount_partition)) {
+                    // TODO: try unsafe unmount stuff
+                    printf("failed.\n");
+                } else {
+                    printf("succeeded.\n");
+                }
             }
             printf("To continue after changing the %s hold B on controller #1 or wait 30 seconds.\n", mount_deviceName);
             mount_timer = gettime() + secs_to_ticks(30);
