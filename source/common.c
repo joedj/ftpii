@@ -151,6 +151,7 @@ static void set_power_flag() {
 void initialise_reset_buttons() {
     SYS_SetResetCallback(set_reset_flag);
     SYS_SetPowerCallback(set_power_flag);
+    WPAD_SetPowerButtonCallback(set_power_flag);
 }
 
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;

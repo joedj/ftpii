@@ -28,7 +28,6 @@ homebrew/development environment that it is.
  - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
- - support wiimote power button
  - use SO_REUSEADDR ?
  - nice UI ;-)
 
@@ -46,6 +45,7 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20081115 0.0.16 Added support for wiimote power button.
 20081026 0.0.15 boot.dol rebuilt with latest libogc git to add SDHC support. (thanks svpe!)
                 Released as boot.dol instead of boot.elf for Homebrew Channel beta9 compatibility.
                 Network initialisation is more reliable - now retries forever on net_init or net_gethostip failure.
