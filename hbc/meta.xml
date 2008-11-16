@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
   <name>ftpii</name>
-  <coder>joedj, srg</coder>
+  <coder>joedj</coder>
   <version>0.0.16</version>
   <release_date>20081116220000</release_date>
   <short_description>An FTP server</short_description> 
