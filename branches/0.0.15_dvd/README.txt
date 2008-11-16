@@ -16,8 +16,8 @@ A working DVDX installation is required for the DVD features.
 *** THANKS ***
 
 Thanks to those in EFnet #wiidev for all the help, particularly nilsk123 for his
-persistent beta testing and suggestions, srg for his contributions, and all those
-who help make devkitPPC, libogc, libfat and The Homebrew Channel the great
+persistent beta testing and suggestions, Daniel Ehlers (srg) for his contributions,
+and all those who help make devkitPPC, libogc, libfat and The Homebrew Channel the great
 homebrew/development environment that it is.
 
 
@@ -38,9 +38,8 @@ homebrew/development environment that it is.
 
 http://code.google.com/p/ftpii/
 
-Contributors:
-  ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
-  Daniel Ehlers <danielehlers@mindeye.net> makes regular source contributions
+ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
+joedj @ EFNet #wiidev
 
 
 *** HISTORY ***
