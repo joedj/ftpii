@@ -366,7 +366,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %11llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', stat_size(&st), filename); // what does it do > 2GB?
+        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', stat_size(&st), filename);
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
