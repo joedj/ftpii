@@ -29,7 +29,7 @@ misrepresented as being the original software.
 #include <ogcsys.h>
 #include <stdio.h>
 
-const char *VIRTUAL_PARTITION_ALIASES[5];
+const char *VIRTUAL_PARTITION_ALIASES[6];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 bool initialise_fat();

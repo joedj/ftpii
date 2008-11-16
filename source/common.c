@@ -34,13 +34,14 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
+#include <wod/wod.h>
 
 #include "common.h"
 
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
 
-const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb", "/dvd" };
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb", "/dvd", "/wod" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
@@ -81,7 +82,9 @@ u32 check_gamecube(u32 mask) {
 
 void to_real_prefix(char *prefix, int virtual_device_index) {
     if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
-        sprintf(prefix, "dvd:/");
+        strcpy(prefix, "dvd:/");
+    } else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
+        strcpy(prefix, "wod:/");
     } else {
         sprintf(prefix, "fat%i:/", virtual_device_index + 1);
     }
@@ -113,7 +116,7 @@ static void fat_enable_readahead(PARTITION_INTERFACE partition) {
 
 static void fat_enable_readahead_all() {
     PARTITION_INTERFACE i;
-    for (i = 1; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+    for (i = 1; i < MAX_VIRTUAL_PARTITION_ALIASES - 1; i++) {
         if (mounted(i - 1)) fat_enable_readahead(i);
     }
 }
@@ -215,6 +218,10 @@ void process_device_select_event(u32 pressed) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
             printf("Unmounting %s...", mount_deviceName);
             if (mount_partition == PI_CUSTOM) {
+                printf("\n");
+                printf("Unmounting images at /wod...");
+                printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
+                printf("Unmounting ISO9660 filesystem at /dvd...");
                 printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
             } else {
                 fflush(stdout);
