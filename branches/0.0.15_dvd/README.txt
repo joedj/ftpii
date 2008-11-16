@@ -10,6 +10,8 @@ To specify a password via The Homebrew Channel, rename the apps/ftpii directory 
 To specify a password via wiiload, pass an argument e.g. wiiload boot.elf YourPassword.
 To specify a password remotely, use the SITE PASSWD and SITE NOPASSWD commands.
 
+A working DVDX installation is required for the DVD features.
+
 
 *** THANKS ***
 

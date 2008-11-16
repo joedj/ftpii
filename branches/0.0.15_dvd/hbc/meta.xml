@@ -10,5 +10,8 @@
 To exit, hold A on controller #1 or press the reset button.
 To remount a device, hold B on controller #1.
 To specify a password, rename the apps/ftpii directory to apps/ftpii_YourPassword.
-To specify a password remotely, use the SITE PASSWD and SITE NOPASSWD commands.</long_description> 
+To specify a password remotely, use the SITE PASSWD and SITE NOPASSWD commands.
+
+A working DVDX installation is required for the DVD features.</long_description> 
+
 </app>
