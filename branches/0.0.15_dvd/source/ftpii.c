@@ -28,6 +28,7 @@ misrepresented as being the original software.
 #include <string.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
+#include <wod/wod.h>
 
 #include "common.h"
 #include "ftp.h"
@@ -78,8 +79,10 @@ static void process_gamecube_events() {
 static void process_dvd_events() {
     if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
         set_dvd_mountWait(false);
-        if (ISO9660_Mount()) printf("Success: DVD is mounted.\n");
-        else printf("Error mounting DVD.\n");
+        printf("Mounting images at /wod...");
+        printf(WOD_Mount() ? "succeeded.\n" : "failed.\n");
+        printf("Mounting ISO9660 filesystem at /dvd...");
+        printf(ISO9660_Mount() ? "succeeded.\n" : "failed.\n");
     }
 }
 
