@@ -109,6 +109,18 @@ void set_dvd_mountWait(bool state) {
     _dvd_mountWait = state;
 }
 
+static void dvd_unmount() {
+    printf("Unmounting images at /wod...");
+    printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
+    printf("Unmounting ISO9660 filesystem at /dvd...");
+    printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
+}
+
+s32 dvd_eject() {
+    dvd_unmount();
+    return DI_Eject();
+}
+
 static void fat_enable_readahead(PARTITION_INTERFACE partition) {
     if (!fatEnableReadAhead(partition, 64, 128))
         printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", VIRTUAL_PARTITION_ALIASES[partition - 1]);
@@ -216,15 +228,10 @@ void process_device_select_event(u32 pressed) {
         }
         if (mount_deviceName) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
-            printf("Unmounting %s...", mount_deviceName);
             if (mount_partition == PI_CUSTOM) {
-                printf("\n");
-                printf("Unmounting images at /wod...");
-                printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
-                printf("Unmounting ISO9660 filesystem at /dvd...");
-                printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
+                dvd_unmount();
             } else {
-                fflush(stdout);
+                printf("Unmounting %s...", mount_deviceName);
                 if (!fatUnmount(mount_partition)) {
                     // TODO: try unsafe unmount stuff
                     printf("failed.\n");
