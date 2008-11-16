@@ -45,7 +45,10 @@ Contributors:
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20081115 0.0.16 Added support for wiimote power button.
+20081116 0.0.16 Added support for wiimote power button.
+                Added SITE EJECT command to eject DVD.
+                Added ISO9660 DVD support.
+                Added Wii Optical Disc image support.
 20081026 0.0.15 boot.dol rebuilt with latest libogc git to add SDHC support. (thanks svpe!)
                 Released as boot.dol instead of boot.elf for Homebrew Channel beta9 compatibility.
                 Network initialisation is more reliable - now retries forever on net_init or net_gethostip failure.
