@@ -76,6 +76,7 @@ static const u8 DISC_VERSION_DUAL = 1;
 
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
+#define BUFFER_SIZE 0x8000
 
 typedef struct {
     char name[WOD_MAXPATHLEN];
@@ -104,7 +105,7 @@ static DIR_ENTRY entries[] = {
 };
 static const u32 FILE_COUNT = sizeof(entries) / sizeof(DIR_ENTRY);
 
-static unsigned char read_buffer[32768] __attribute__((aligned(32)));
+static unsigned char read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 
 static DIR_ENTRY *entry_from_path(const char *path) {
     if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
@@ -114,10 +115,10 @@ static DIR_ENTRY *entry_from_path(const char *path) {
         while (pathPosition[0] == DIR_SEPARATOR) pathPosition++;
         if (pathPosition >= pathEnd) return &entries[0];
     }
-    if (strcmp(".", pathPosition) == 0) return &entries[0];
+    if (!strcmp(".", pathPosition)) return &entries[0];
     u32 i;
     for (i = 1; i < FILE_COUNT; i++) {
-        if (strcasecmp(pathPosition, entries[i].name) == 0) {
+        if (!strcasecmp(pathPosition, entries[i].name)) {
             if (!entries[i].enabled) return NULL;
             return &entries[i];
         }
@@ -172,8 +173,10 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
     }
 
     u32 sector = file->offset / SECTOR_SIZE;
+    u32 end_sector = (file->offset + len - 1) / SECTOR_SIZE;
+    u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
     u32 sector_offset = file->offset % SECTOR_SIZE;
-    u32 sectors = MIN(16, len / SECTOR_SIZE + 2);
+    len = MIN(BUFFER_SIZE - sector_offset, len);
     if (DI_ReadDVD(read_buffer, sectors, sector)) {
         r->_errno = EIO;
         return -1;
