@@ -238,7 +238,7 @@ static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
     if (!vrt_stat(client->cwd, path, &st)) {
         char size_buf[12];
-        sprintf(size_buf, "%li", st.st_size); // XXX: what does this do for files over 2GB?
+        sprintf(size_buf, "%llu", stat_size(&st));
         return write_reply(client, 213, size_buf);
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -366,7 +366,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
+        sprintf(line, "%crwxr-xr-x    1 0        0     %11llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', stat_size(&st), filename); // what does it do > 2GB?
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }

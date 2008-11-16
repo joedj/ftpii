@@ -28,6 +28,7 @@ misrepresented as being the original software.
 #include <network.h>
 #include <ogcsys.h>
 #include <stdio.h>
+#include <sys/dir.h>
 
 const char *VIRTUAL_PARTITION_ALIASES[6];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
@@ -84,6 +85,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
 char *dirname(char *path);
 char *basename(char *path);
+u64 stat_size(struct stat *st);
 
 extern u32 net_gethostip();
 
