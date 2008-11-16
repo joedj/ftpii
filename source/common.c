@@ -463,3 +463,8 @@ char *basename(char *path) {
     }
     return path;
 }
+
+u64 stat_size(struct stat *st) {
+    if (st->st_dev == WOD_DEVICE) return st->st_blksize * (u64)st->st_blocks;
+    return st->st_size;
+}
