@@ -409,18 +409,14 @@ static int read_entry(DIR_ENTRY *entry, u8 *buf) {
         char *name = child->name;
         if (mountState.unicode) {
             u32 i;
-            for (i = 0; i < (namelen / 2); ++i) name[i] = buf[OFFSET_NAME + i * 2 + 1];
+            for (i = 0; i < (namelen / 2); i++) name[i] = buf[OFFSET_NAME + i * 2 + 1];
             name[i] = '\x00';
             namelen = i;
         } else {
             memcpy(name, buf + OFFSET_NAME, namelen);
             name[namelen] = '\x00';
         }
-        if (flags & 2) {
-            name[namelen] = '\x00';
-        } else {
-            if (namelen >= 2 && name[namelen - 2] == ';') name[namelen - 2] = '\x00';
-        }
+        if (!(flags & 2) && namelen >= 2 && name[namelen - 2] == ';') name[namelen - 2] = '\x00';
     }
 
     return *buf;
