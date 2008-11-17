@@ -67,7 +67,7 @@ static struct {
     bool unicode;
 } mountState;
 
-struct pvd_s {
+struct volume_descriptor {
     char id[8];
     char system_id[32];
     char volume_id[32];
@@ -89,9 +89,7 @@ static bool is_dir(DIR_ENTRY *entry) {
 }
 
 static DIR_ENTRY *entry_from_path(const char *path) {
-    if (strchr(path, ':') != NULL) {
-        path = strchr(path, ':') + 1;
-    }
+    if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
     DIR_ENTRY *entry;
     bool found = false;
     bool notFound = false;
@@ -99,28 +97,18 @@ static DIR_ENTRY *entry_from_path(const char *path) {
     const char *pathEnd = strchr(path, '\0');
     if (pathPosition[0] == DIR_SEPARATOR) {
         entry = mountState.root;
-        while (pathPosition[0] == DIR_SEPARATOR) {
-            pathPosition++;
-        }
-        if (pathPosition >= pathEnd) {
-            found = true;
-        }
+        while (pathPosition[0] == DIR_SEPARATOR) pathPosition++;
+        if (pathPosition >= pathEnd) found = true;
     } else {
         entry = mountState.current;
     }
-    if (entry == mountState.root && !strcmp(".", pathPosition)) {
-        found = true;
-    }
+    if (entry == mountState.root && !strcmp(".", pathPosition)) found = true;
     DIR_ENTRY *dir = entry;
     while (!found && !notFound) {
         const char *nextPathPosition = strchr(pathPosition, DIR_SEPARATOR);
         size_t dirnameLength;
-        if (nextPathPosition != NULL) {
-            dirnameLength = nextPathPosition - pathPosition;
-        } else {
-            dirnameLength = strlen(pathPosition);
-        }
-
+        if (nextPathPosition != NULL) dirnameLength = nextPathPosition - pathPosition;
+        else dirnameLength = strlen(pathPosition);
         if (dirnameLength >= ISO_MAXPATHLEN) return NULL;
 
         u32 fileIndex = 0;
@@ -481,39 +469,31 @@ static bool read_recursive(DIR_ENTRY *entry) {
     return true;
 }
 
-static bool read_directories() {
-    struct pvd_s *pvd = NULL;
-    struct pvd_s *svd = NULL;
-    u32 sector;
+struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
+    u8 sector;
     for (sector = 16; sector < 32; sector++) {
         if (DI_ReadDVD(read_buffer, 1, sector)) return false;
-        if (!memcmp(((struct pvd_s *)read_buffer)->id, "\2CD001\1", 8)) {
-            svd = (struct pvd_s *)read_buffer;
-            break;
-        }
-    }
-    if (!svd) {
-        for (sector = 16; sector < 32; sector++) {
-            if (DI_ReadDVD(read_buffer, 1, sector)) return false;
-            if (!memcmp(((struct pvd_s *)read_buffer)->id, "\1CD001\1", 8)) {
-                pvd = (struct pvd_s *)read_buffer;
-                break;
+        if (!memcmp(((struct volume_descriptor *)read_buffer)->id + 1, "CD001\1", 6)) {
+            if (*read_buffer == descriptor) {
+                return (struct volume_descriptor *)read_buffer;
+            } else if (*read_buffer == 0xff) {
+                return NULL;
             }
         }
-    }
-    if (!pvd && !svd) return false;
 
+    }
+    return NULL;
+}
+
+static bool read_directories() {
+    struct volume_descriptor *volume = NULL;
+    volume = read_volume_descriptor(2);
+    if (volume) mountState.unicode = true;
+    else if (!(volume = read_volume_descriptor(1))) return false;
     if (!(mountState.root = malloc(sizeof(DIR_ENTRY)))) return false;
     bzero(mountState.root, sizeof(DIR_ENTRY));
     mountState.current = mountState.root;
-    if (svd) {
-        mountState.unicode = true;
-        if (read_entry(mountState.root, svd->root) == -1) return false;
-    } else {
-        mountState.unicode = false;
-        if (read_entry(mountState.root, pvd->root) == -1) return false;
-    }
-
+    if (read_entry(mountState.root, volume->root) == -1) return false;
     return read_recursive(mountState.root);
 }
 
@@ -527,7 +507,9 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
 
 bool ISO9660_Mount() {
     ISO9660_Unmount();
-    return read_directories() && AddDevice(&dotab_iso9660) >= 0;
+    bool success = read_directories() && AddDevice(&dotab_iso9660) >= 0;
+    if (!success) ISO9660_Unmount();
+    return success;
 }
 
 bool ISO9660_Unmount() {
