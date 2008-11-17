@@ -67,23 +67,6 @@ static struct {
     bool unicode;
 } mountState;
 
-struct volume_descriptor {
-    char id[8];
-    char system_id[32];
-    char volume_id[32];
-    char zero[8];
-    unsigned long total_sector_le, total_sect_be;
-    char zero2[32];
-    unsigned long volume_set_size, volume_seq_nr;
-    unsigned short sector_size_le, sector_size_be;
-    unsigned long path_table_len_le, path_table_len_be;
-    unsigned long path_table_le, path_table_2nd_le;
-    unsigned long path_table_be, path_table_2nd_be;
-    u8 root[34];
-    char volume_set_id[128], publisher_id[128], data_preparer_id[128], application_id[128];
-    char copyright_file_id[37], abstract_file_id[37], bibliographical_file_id[37];
-}  __attribute__((packed));
-
 static bool is_dir(DIR_ENTRY *entry) {
     return entry->flags & 2;
 }
@@ -394,6 +377,7 @@ static const devoptab_t dotab_iso9660 = {
     _ISO9660_statvfs_r
 };
 
+#define OFFSET_EXTENDED 1
 #define OFFSET_SECTOR 6
 #define OFFSET_SIZE 14
 #define OFFSET_FLAGS 25
@@ -401,8 +385,9 @@ static const devoptab_t dotab_iso9660 = {
 #define OFFSET_NAME 33
 
 static int read_entry(DIR_ENTRY *entry, u8 *buf) {
-    u32 sector = buf[OFFSET_SECTOR] << 24 | buf[OFFSET_SECTOR + 1] << 16 | buf[OFFSET_SECTOR + 2] << 8 | buf[OFFSET_SECTOR + 3];
-    u32 size = buf[OFFSET_SIZE] << 24 | buf[OFFSET_SIZE + 1] << 16 | buf[OFFSET_SIZE + 2] << 8 | buf[OFFSET_SIZE + 3];
+    u8 extended_sectors = buf[OFFSET_EXTENDED];
+    u32 sector = *(u32 *)(buf + OFFSET_SECTOR) + extended_sectors;
+    u32 size = *(u32 *)(buf + OFFSET_SIZE);
     u8 flags = buf[OFFSET_FLAGS];
     u8 namelen = buf[OFFSET_NAMELEN];
 
@@ -463,22 +448,36 @@ static bool read_directory(DIR_ENTRY *entry) {
 static bool read_recursive(DIR_ENTRY *entry) {
     if (!read_directory(entry)) return false;
     u32 i;
-    for (i = 0; i < entry->fileCount; i++) {
-        if (is_dir(&entry->children[i]) && !read_recursive(&entry->children[i])) return false;
-    }
+    for (i = 0; i < entry->fileCount; i++)
+        if (is_dir(&entry->children[i]) && !read_recursive(&entry->children[i]))
+            return false;
     return true;
 }
+
+struct volume_descriptor {
+    char id[8];
+    char system_id[32];
+    char volume_id[32];
+    char zero[8];
+    unsigned long total_sector_le, total_sect_be;
+    char zero2[32];
+    unsigned long volume_set_size, volume_seq_nr;
+    unsigned short sector_size_le, sector_size_be;
+    unsigned long path_table_len_le, path_table_len_be;
+    unsigned long path_table_le, path_table_2nd_le;
+    unsigned long path_table_be, path_table_2nd_be;
+    u8 root[34];
+    char volume_set_id[128], publisher_id[128], data_preparer_id[128], application_id[128];
+    char copyright_file_id[37], abstract_file_id[37], bibliographical_file_id[37];
+}  __attribute__((packed));
 
 struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
     u8 sector;
     for (sector = 16; sector < 32; sector++) {
-        if (DI_ReadDVD(read_buffer, 1, sector)) return false;
-        if (!memcmp(((struct volume_descriptor *)read_buffer)->id + 1, "CD001\1", 6)) {
-            if (*read_buffer == descriptor) {
-                return (struct volume_descriptor *)read_buffer;
-            } else if (*read_buffer == 0xff) {
-                return NULL;
-            }
+        if (DI_ReadDVD(read_buffer, 1, sector)) return NULL;
+        if (!memcmp(read_buffer + 1, "CD001\1", 6)) {
+            if (*read_buffer == descriptor) return (struct volume_descriptor *)read_buffer;
+            else if (*read_buffer == 0xff) return NULL;
         }
 
     }
@@ -486,8 +485,7 @@ struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
 }
 
 static bool read_directories() {
-    struct volume_descriptor *volume = NULL;
-    volume = read_volume_descriptor(2);
+    struct volume_descriptor *volume = read_volume_descriptor(2);
     if (volume) mountState.unicode = true;
     else if (!(volume = read_volume_descriptor(1))) return false;
     if (!(mountState.root = malloc(sizeof(DIR_ENTRY)))) return false;
@@ -499,9 +497,9 @@ static bool read_directories() {
 
 static void cleanup_recursive(DIR_ENTRY *entry) {
     u32 i;
-    for (i = 0; i < entry->fileCount; i++) {
-        if (is_dir(&entry->children[i])) cleanup_recursive(&entry->children[i]);
-    }
+    for (i = 0; i < entry->fileCount; i++)
+        if (is_dir(&entry->children[i]))
+            cleanup_recursive(&entry->children[i]);
     if (entry->children) free(entry->children);
 }
 
