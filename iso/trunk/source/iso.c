@@ -40,9 +40,9 @@ misrepresented as being the original software.
 
 typedef struct DIR_ENTRY_STRUCT {
     char name[ISO_MAXPATHLEN];
-    u8 flags;
     u32 sector;
     u32 size;
+    u8 flags;
     u32 fileCount;
     struct DIR_ENTRY_STRUCT *children;
 } DIR_ENTRY;
@@ -394,9 +394,9 @@ static int read_entry(DIR_ENTRY *entry, u8 *buf) {
     if (namelen == 1 && buf[OFFSET_NAME] == 1) {
         // ..
     } else if (namelen == 1 && !buf[OFFSET_NAME]) {
-        entry->flags = flags;
         entry->sector = sector;
         entry->size = size;
+        entry->flags = flags;
     } else {
         DIR_ENTRY *newChildren = realloc(entry->children, sizeof(DIR_ENTRY) * (entry->fileCount + 1));
         if (!newChildren) return -1;
