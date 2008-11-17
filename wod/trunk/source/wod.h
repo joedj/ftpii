@@ -1,6 +1,6 @@
 /*
 
-libwod -- a DVD image devoptab library for the Wii
+libwod -- a disc image devoptab library for the Wii
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 

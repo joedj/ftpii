@@ -1,6 +1,6 @@
 /*
 
-libwod -- a DVD image devoptab library for the Wii
+libwod -- a disc image devoptab library for the Wii
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
@@ -117,12 +117,9 @@ static DIR_ENTRY *entry_from_path(const char *path) {
     }
     if (!strcmp(".", pathPosition)) return &entries[0];
     u32 i;
-    for (i = 1; i < FILE_COUNT; i++) {
-        if (!strcasecmp(pathPosition, entries[i].name)) {
-            if (!entries[i].enabled) return NULL;
-            return &entries[i];
-        }
-    }
+    for (i = 1; i < FILE_COUNT; i++)
+        if (!strcasecmp(pathPosition, entries[i].name))
+            return entries[i].enabled ? &entries[i] : NULL;
     return NULL;
 }
 
@@ -387,7 +384,7 @@ static const devoptab_t dotab_wod = {
     _WOD_statvfs_r
 };
 
-struct dvd_header_struct {
+struct disc_header {
     u8 disc_id;
     u8 game_code[2];
     u8 region_code;
@@ -404,16 +401,16 @@ struct dvd_header_struct {
     u8 disable_encryption;
 } __attribute__((packed));
 
-typedef struct {
-    struct dvd_header_struct header;
+struct disc_info {
+    struct disc_header header;
     u64 size;
     const char *disc_type;
     const char *region;
-} dvd_info;
+};
 
-static bool get_dvd_info(dvd_info *info) {
+static bool get_disc_info(struct disc_info *info) {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
-    memcpy(&info->header, read_buffer, sizeof(struct dvd_header_struct));
+    memcpy(&info->header, read_buffer, sizeof(struct disc_header));
     info->size = DISC_SIZE_WII_SINGLE;
     info->disc_type = DISC_NAME_UNKNOWN;
     if (info->header.disc_version == DISC_VERSION_DUAL) {
@@ -442,10 +439,9 @@ static bool get_dvd_info(dvd_info *info) {
     return true;
 }
 
-bool WOD_Mount() {
-    WOD_Unmount();
-    dvd_info info;
-    if (!get_dvd_info(&info)) return false;
+static bool read_disc_info() {
+    struct disc_info info;
+    if (!get_disc_info(&info)) return false;
     if (info.disc_type == DISC_NAME_UNKNOWN) {
         u32 i;
         for (i = 1; i < (FILE_COUNT - 1); i++) {
@@ -458,7 +454,14 @@ bool WOD_Mount() {
             info.header.title, info.disc_type, info.region);
         entries[FILE_COUNT - 1].size = info.size;
     }
-    return AddDevice(&dotab_wod) >= 0;
+    return true;
+}
+
+bool WOD_Mount() {
+    WOD_Unmount();
+    bool success = read_disc_info() && AddDevice(&dotab_wod) >= 0;
+    if (!success) WOD_Unmount();
+    return success;
 }
 
 bool WOD_Unmount() {

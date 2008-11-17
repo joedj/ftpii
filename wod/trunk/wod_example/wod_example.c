@@ -1,6 +1,6 @@
 /*
 
-libwod -- a DVD image devoptab library for the Wii
+libwod -- a disc image devoptab library for the Wii
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
@@ -45,8 +45,8 @@ static void initialise_video() {
     VIDEO_Flush();
 }
 
-static bool initialise_dvd() {
-    printf("Initialising DVD.  This will wait for a disc to be inserted...\n");
+static bool initialise() {
+    printf("Initialising.  This will wait for a disc to be inserted...\n");
     DI_Mount();
     while (DI_GetStatus() & DVD_INIT) usleep(5000);
     if (DI_GetStatus() & DVD_READY) return WOD_Mount();
@@ -59,12 +59,12 @@ int main(int argc, char **argv) {
     PAD_Init();
     WPAD_Init();
 
-    if (!initialise_dvd()) {
-        printf("Unable to initialise DVD. DI_GetStatus() == %i\n", DI_GetStatus());
+    if (!initialise()) {
+        printf("Unable to initialise. DI_GetStatus() == %i\n", DI_GetStatus());
         return 1;
     }
 
-    printf("Listing DVD images directory:\n");
+    printf("Listing wod:/\n");
     u32 fileCount = 0;
     DIR_ITER *dir = diropen("wod:/");
     if (!dir) {
