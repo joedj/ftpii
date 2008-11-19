@@ -30,7 +30,7 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <sys/dir.h>
 
-const char *VIRTUAL_PARTITION_ALIASES[6];
+const char *VIRTUAL_PARTITION_ALIASES[7];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 bool initialise_fat();

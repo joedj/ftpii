@@ -48,20 +48,21 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
 
 20081116 0.0.16 Added support for wiimote power button.
                 Added SITE EJECT command to eject DVD.
-                Added ISO9660 DVD support.
-                Added Wii Optical Disc image support.
+                Added ISO9660 DVD support (libiso).
+                Added Wii Optical Disc image support (libwod).
+                Added Wii disc filesystem support (libfst). (thanks Nuke!)
 20081026 0.0.15 boot.dol rebuilt with latest libogc git to add SDHC support. (thanks svpe!)
                 Released as boot.dol instead of boot.elf for Homebrew Channel beta9 compatibility.
                 Network initialisation is more reliable - now retries forever on net_init or net_gethostip failure.
 20080918 0.0.14 boot.elf rebuilt with latest libfat CVS to fix delete corruption bug
-                and speed up opening large files (thanks rodries!)
+                and speed up opening large files. (thanks rodries!)
 20080816 0.0.13 Replaced threads with mostly-async networking.
                 Attempt to detect whether to exit to loader or system menu (e.g. when loaded from a DVD).
                 Clean up open descriptors before exiting.
                 Added 30 second data connection timeout.
                 Added support for power button.
                 Added GameCube controller support.
-20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files,
+20080726 0.0.12 boot.elf rebuilt with patched libfat to set archive flag on new files.,
                 allowing Data Management to see uploaded save games (e.g. TP hack).
 20080720 0.0.11 boot.elf rebuilt with patched libfat to stop read-ahead cache providing old data. (thanks dhewg!)
                 Attempt to fix USB ethernet adapter by initialisaing network subsystem before FAT.
@@ -74,14 +75,14 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
 20080624 0.0.7  Added virtual path support for /sd and /usb. (thanks srg!)
                 Added SITE LOADER command to return to loader.
                 Added SITE CLEAR command to clear the console.
-                Support for starting without a device connected (thanks srg!)
-                Support for SD Gecko (though currently disabled in libfat) (thanks srg!)
-                Re-enable read-ahead when remounting (thanks srg!)
+                Support for starting without a device connected. (thanks srg!)
+                Support for SD Gecko (though currently disabled in libfat). (thanks srg!)
+                Re-enable read-ahead when remounting. (thanks srg!)
 20080617 0.0.6  Incorporated SD-card and USB hot-swapping patch. (thanks srg!)
 20080615 0.0.5  Added support for buggy FTP clients that use "LIST -aL" or similar, at the expense of breaking
                 paths that begin with '-'.
                 Compiled with corruption-fix and usbstorage libfat patches. (thanks svpe!)
-                Uncommented FAT read-ahead support (oops)
+                Uncommented FAT read-ahead support (oops).
 20080613 0.0.4  Added rename support, as well as append and resume.
                 Fixed _another_ nasty crash bug introduced in 0.0.3 when creating directories. (thanks nilsk123!)
 20080612 0.0.3  Multi-client support (up to 5), using LWPs.  Unfortunately this makes things

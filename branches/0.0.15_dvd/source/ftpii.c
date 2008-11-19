@@ -24,6 +24,7 @@ misrepresented as being the original software.
 
 */
 #include <di/di.h>
+#include <fst/fst.h>
 #include <iso/iso.h>
 #include <string.h>
 #include <unistd.h>
@@ -81,6 +82,8 @@ static void process_dvd_events() {
         set_dvd_mountWait(false);
         printf("Mounting images at /wod...");
         printf(WOD_Mount() ? "succeeded.\n" : "failed.\n");
+        printf("Mounting Wii disc filesystem at /fst...");
+        printf(FST_Mount() ? "succeeded.\n" : "failed.\n");
         printf("Mounting ISO9660 filesystem at /dvd...");
         printf(ISO9660_Mount() ? "succeeded.\n" : "failed.\n");
     }
