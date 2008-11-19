@@ -21,7 +21,7 @@ the great homebrew/development environment that it is:
 
 http://code.google.com/p/ftpii/
 
-ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
+libwod is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
 joedj @ EFNet #wiidev
 
 
