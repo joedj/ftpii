@@ -105,7 +105,7 @@ static DIR_ENTRY entries[] = {
 };
 static const u32 FILE_COUNT = sizeof(entries) / sizeof(DIR_ENTRY);
 
-static unsigned char read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
+static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 
 static DIR_ENTRY *entry_from_path(const char *path) {
     if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
