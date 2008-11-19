@@ -34,6 +34,7 @@ misrepresented as being the original software.
 
 #include "iso.h"
 
+#define FLAG_DIR 2
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
 #define BUFFER_SIZE 0x8000
@@ -61,14 +62,12 @@ typedef struct {
 
 static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 
-static struct {
-    DIR_ENTRY *root;
-    DIR_ENTRY *current;
-    bool unicode;
-} mountState;
+static DIR_ENTRY *root = NULL;
+static DIR_ENTRY *current = NULL;
+static bool unicode = false;
 
 static bool is_dir(DIR_ENTRY *entry) {
-    return entry->flags & 2;
+    return entry->flags & FLAG_DIR;
 }
 
 static DIR_ENTRY *entry_from_path(const char *path) {
@@ -79,13 +78,13 @@ static DIR_ENTRY *entry_from_path(const char *path) {
     const char *pathPosition = path;
     const char *pathEnd = strchr(path, '\0');
     if (pathPosition[0] == DIR_SEPARATOR) {
-        entry = mountState.root;
+        entry = root;
         while (pathPosition[0] == DIR_SEPARATOR) pathPosition++;
         if (pathPosition >= pathEnd) found = true;
     } else {
-        entry = mountState.current;
+        entry = current;
     }
-    if (entry == mountState.root && !strcmp(".", pathPosition)) found = true;
+    if (entry == root && !strcmp(".", pathPosition)) found = true;
     DIR_ENTRY *dir = entry;
     while (!found && !notFound) {
         const char *nextPathPosition = strchr(pathPosition, DIR_SEPARATOR);
@@ -269,7 +268,7 @@ static int _ISO9660_chdir_r(struct _reent *r, const char *path) {
         r->_errno = ENOTDIR;
         return -1;
     }
-    mountState.current = entry;
+    current = entry;
     return 0;
 }
 
@@ -407,7 +406,7 @@ static int read_entry(DIR_ENTRY *entry, u8 *buf) {
         child->size = size;
         child->flags = flags;
         char *name = child->name;
-        if (mountState.unicode) {
+        if (unicode) {
             u32 i;
             for (i = 0; i < (namelen / 2); i++) name[i] = buf[OFFSET_NAME + i * 2 + 1];
             name[i] = '\x00';
@@ -416,7 +415,7 @@ static int read_entry(DIR_ENTRY *entry, u8 *buf) {
             memcpy(name, buf + OFFSET_NAME, namelen);
             name[namelen] = '\x00';
         }
-        if (!(flags & 2) && namelen >= 2 && name[namelen - 2] == ';') name[namelen - 2] = '\x00';
+        if (!(flags & FLAG_DIR) && namelen >= 2 && name[namelen - 2] == ';') name[namelen - 2] = '\x00';
     }
 
     return *buf;
@@ -482,13 +481,13 @@ struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
 
 static bool read_directories() {
     struct volume_descriptor *volume = read_volume_descriptor(2);
-    if (volume) mountState.unicode = true;
+    if (volume) unicode = true;
     else if (!(volume = read_volume_descriptor(1))) return false;
-    if (!(mountState.root = malloc(sizeof(DIR_ENTRY)))) return false;
-    bzero(mountState.root, sizeof(DIR_ENTRY));
-    mountState.current = mountState.root;
-    if (read_entry(mountState.root, volume->root) == -1) return false;
-    return read_recursive(mountState.root);
+    if (!(root = malloc(sizeof(DIR_ENTRY)))) return false;
+    bzero(root, sizeof(DIR_ENTRY));
+    current = root;
+    if (read_entry(root, volume->root) == -1) return false;
+    return read_recursive(root);
 }
 
 static void cleanup_recursive(DIR_ENTRY *entry) {
@@ -507,12 +506,12 @@ bool ISO9660_Mount() {
 }
 
 bool ISO9660_Unmount() {
-    if (mountState.root) {
-        cleanup_recursive(mountState.root);
-        free(mountState.root);
-        mountState.root = NULL;
+    if (root) {
+        cleanup_recursive(root);
+        free(root);
+        root = NULL;
     }
-    mountState.current = mountState.root;
-    mountState.unicode = false;
+    current = root;
+    unicode = false;
     return !RemoveDevice("dvd:/");
 }
