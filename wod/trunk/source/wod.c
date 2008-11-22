@@ -106,6 +106,8 @@ static DIR_ENTRY entries[] = {
 static const u32 FILE_COUNT = sizeof(entries) / sizeof(DIR_ENTRY);
 
 static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
+static u32 cache_start = 0;
+static u32 cache_sectors = 0;
 
 static DIR_ENTRY *entry_from_path(const char *path) {
     if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
@@ -171,13 +173,21 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
 
     u32 sector = file->offset / SECTOR_SIZE;
     u32 end_sector = (file->offset + len - 1) / SECTOR_SIZE;
-    u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
     u32 sector_offset = file->offset % SECTOR_SIZE;
+    u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
     len = MIN(BUFFER_SIZE - sector_offset, len);
-    if (DI_ReadDVD(read_buffer, sectors, sector)) {
+    if (cache_sectors && sector >= cache_start && (sector + sectors) <= (cache_start + cache_sectors)) {
+        memcpy(ptr, read_buffer + (sector - cache_start) * SECTOR_SIZE + sector_offset, len);
+        file->offset += len;
+        return len;
+    }
+    if (DI_ReadDVD(read_buffer, 16, sector)) {
+        cache_sectors = 0;
         r->_errno = EIO;
         return -1;
     }
+    cache_start = sector;
+    cache_sectors = 16;
     memcpy(ptr, read_buffer + sector_offset, len);
     file->offset += len;
     return len;
@@ -441,5 +451,6 @@ bool WOD_Unmount() {
     for (i = 1; i < FILE_COUNT; i++) {
         entries[i].enabled = false;
     }
+    cache_sectors = 0;
     return !RemoveDevice("wod:/");
 }
