@@ -508,6 +508,9 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
 }
 
 static bool read_disc() {
+    if (DI_ReadDVD(read_buffer, 1, 0)) return false;
+    DISC_HEADER *header = (DISC_HEADER *)read_buffer;
+    if (memcmp(header->magic, "\x5d\x1c\x9e\xa3", 4)) return false;
     if (DI_ReadDVD(read_buffer, 1, 128)) return false;
     PARTITION_TABLE_ENTRY tables[4];
     memcpy(tables, read_buffer, sizeof(PARTITION_TABLE_ENTRY) * 4);
