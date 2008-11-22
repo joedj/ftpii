@@ -61,6 +61,8 @@ bool dvd_mountWait();
 
 void set_dvd_mountWait(bool state);
 
+s32 dvd_stop();
+
 s32 dvd_eject();
 
 void process_remount_event();
