@@ -56,7 +56,7 @@ typedef struct {
 
 typedef struct DIR_ENTRY_STRUCT {
     char name[FST_MAXPATHLEN];
-    PARTITION *partition;
+    u32 partition_idx;
     u32 offset; // for files this is the offset of the file payload in the disc partition >> 2, for directories it is the index of the entry in the fst
     u32 size;
     u8 flags;
@@ -236,10 +236,8 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
     u32 offset_from_cluster_in_data = offset_in_data % ENCRYPTED_CLUSTER_SIZE;
     len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster_in_data, len);
     u64 cluster_offset_in_data = (offset_in_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
-    u64 data_offset = (file->entry->partition->offset << 2LL) + 0x20000;
-    // u8 cluster_buffer[PLAINTEXT_CLUSTER_SIZE];
-    _break();
-    if (!read_and_decrypt_cluster(file->entry->partition->key, cluster_buffer, data_offset + cluster_offset_in_data)) {
+    u64 data_offset = (partitions[file->entry->partition_idx].offset << 2LL) + 0x20000;
+    if (!read_and_decrypt_cluster(partitions[file->entry->partition_idx].key, cluster_buffer, data_offset + cluster_offset_in_data)) {
         r->_errno = EIO;
         return -1;
     }
@@ -496,7 +494,7 @@ static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
     bzero(newChildren + dir->fileCount, sizeof(DIR_ENTRY));
     dir->children = newChildren;
     DIR_ENTRY *child = &dir->children[dir->fileCount++];
-    child->partition = dir->partition;
+    child->partition_idx = dir->partition_idx;
     return child;
 }
 
@@ -573,7 +571,7 @@ static bool read_disc() {
                 if (!partition_entry) return false;
                 sprintf(partition_entry->name, "%u", partition_count);
                 partition_entry->flags = FLAG_DIR;
-                partition_entry->partition = partition;
+                partition_entry->partition_idx = partition_count;
                 partition->offset = entries[partition_index].offset;
                 if (!read_title_key(partition->key, partition->offset)) return false;
 
