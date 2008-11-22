@@ -44,6 +44,7 @@ misrepresented as being the original software.
 #define CLUSTER_HEADER_SIZE 0x400
 #define ENCRYPTED_CLUSTER_SIZE 0x8000
 #define PLAINTEXT_CLUSTER_SIZE (ENCRYPTED_CLUSTER_SIZE - CLUSTER_HEADER_SIZE)
+#define AES_BLOCK_SIZE 16
 
 typedef struct {
     u32 dol_offset;
@@ -168,19 +169,27 @@ static int _FST_close_r(struct _reent *r, int fd) {
     return 0;
 }
 
+static u32 cache_start_sector = 0;
+static u32 cache_sectors = 0;
+
 static int _read(void *ptr, u64 offset, u32 len) {
     u32 sector = offset / SECTOR_SIZE;
     u32 sector_offset = offset % SECTOR_SIZE;
     len = MIN(BUFFER_SIZE - sector_offset, len);
     u32 end_sector = (offset + len - 1) / SECTOR_SIZE;
-    u32 sectors = end_sector - sector + 1;
-    if (DI_ReadDVD(read_buffer, sectors, sector)) return -1;
-    memcpy(ptr, read_buffer + sector_offset, len);
+    if (cache_sectors && sector >= cache_start_sector && end_sector < (cache_start_sector + cache_sectors)) {
+        memcpy(ptr, read_buffer + ((sector - cache_start_sector) * SECTOR_SIZE) + sector_offset, len);
+    } else {
+        if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) return -1;
+        memcpy(ptr, read_buffer + sector_offset, len);
+        cache_start_sector = sector;
+        cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
+    }
     return len;
 }
 
 static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
-    u32 end = (offset_from_cluster + len + SECTOR_SIZE - 1) / SECTOR_SIZE * SECTOR_SIZE;
+    u32 end = (offset_from_cluster + len + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE * AES_BLOCK_SIZE;
     u32 bytes_read = _read(buf, offset, end);
     if (bytes_read != end) return false;
     u8 *iv = buf + 0x3d0;
@@ -495,6 +504,7 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
 }
 
 static bool read_disc() {
+    cache_sectors = 0;
     if (DI_ReadDVD(read_buffer, 1, 128)) return false;
     PARTITION_TABLE_ENTRY tables[4];
     memcpy(tables, read_buffer, sizeof(PARTITION_TABLE_ENTRY) * 4);
