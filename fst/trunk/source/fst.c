@@ -81,12 +81,16 @@ typedef struct {
     bool inUse;
 } DIR_STATE_STRUCT;
 
-static unsigned char read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
+static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
 
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
 static PARTITION *partitions = NULL;
+
+static u8 aescache[PLAINTEXT_CLUSTER_SIZE] __attribute__((aligned(32)));
+static u64 aescache_start = 0;
+static u64 aescache_end = 0;
 
 static bool is_dir(DIR_ENTRY *entry) {
     return entry->flags & FLAG_DIR;
@@ -169,40 +173,40 @@ static int _FST_close_r(struct _reent *r, int fd) {
     return 0;
 }
 
-static u32 cache_start_sector = 0;
-static u32 cache_sectors = 0;
-
 static int _read(void *ptr, u64 offset, u32 len) {
     u32 sector = offset / SECTOR_SIZE;
     u32 sector_offset = offset % SECTOR_SIZE;
     len = MIN(BUFFER_SIZE - sector_offset, len);
-    u32 end_sector = (offset + len - 1) / SECTOR_SIZE;
-    if (cache_sectors && sector >= cache_start_sector && end_sector < (cache_start_sector + cache_sectors)) {
-        memcpy(ptr, read_buffer + ((sector - cache_start_sector) * SECTOR_SIZE) + sector_offset, len);
-    } else {
-        if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) return -1;
-        memcpy(ptr, read_buffer + sector_offset, len);
-        cache_start_sector = sector;
-        cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
-    }
+    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) return -1;
+    memcpy(ptr, read_buffer + sector_offset, len);
     return len;
 }
 
-static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
-    u32 end = (offset_from_cluster + len + AES_BLOCK_SIZE - 1) / AES_BLOCK_SIZE * AES_BLOCK_SIZE;
-    u32 bytes_read = _read(buf, offset, end);
-    if (bytes_read != end) return false;
-    u8 *iv = buf + 0x3d0;
-    u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
-    u8 outbuf[end - CLUSTER_HEADER_SIZE];
-    aes_set_key(title_key);
-    aes_decrypt(iv, inbuf, outbuf, end - CLUSTER_HEADER_SIZE);
-    memcpy(buf, outbuf + offset_from_cluster - CLUSTER_HEADER_SIZE, len);
-    return true;
+static u64 cipher_to_plaintext(u64 offset) {
+    return offset / ENCRYPTED_CLUSTER_SIZE * PLAINTEXT_CLUSTER_SIZE + (offset % ENCRYPTED_CLUSTER_SIZE) - CLUSTER_HEADER_SIZE;
 }
 
 static u64 plaintext_to_cipher(u64 offset) {
     return offset / PLAINTEXT_CLUSTER_SIZE * ENCRYPTED_CLUSTER_SIZE + (offset % PLAINTEXT_CLUSTER_SIZE) + CLUSTER_HEADER_SIZE;
+}
+
+static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
+    u64 cache_start = cipher_to_plaintext(offset + offset_from_cluster);
+    u64 cache_end = cipher_to_plaintext(offset + offset_from_cluster + len);
+    if (aescache_end && cache_start >= aescache_start && cache_end <= aescache_end) {
+        memcpy(buf, aescache + (cache_start - aescache_start), len);
+        return true;
+    }
+    u32 bytes_read = _read(buf, offset, ENCRYPTED_CLUSTER_SIZE);
+    if (bytes_read != ENCRYPTED_CLUSTER_SIZE) return false;
+    u8 *iv = buf + 0x3d0;
+    u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
+    aes_set_key(title_key);
+    aes_decrypt(iv, inbuf, aescache, PLAINTEXT_CLUSTER_SIZE);
+    aescache_start = cipher_to_plaintext(offset + CLUSTER_HEADER_SIZE);
+    aescache_end = aescache_start + PLAINTEXT_CLUSTER_SIZE;
+    memcpy(buf, aescache + offset_from_cluster - CLUSTER_HEADER_SIZE, len);
+    return true;
 }
 
 static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
@@ -504,7 +508,6 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
 }
 
 static bool read_disc() {
-    cache_sectors = 0;
     if (DI_ReadDVD(read_buffer, 1, 128)) return false;
     PARTITION_TABLE_ENTRY tables[4];
     memcpy(tables, read_buffer, sizeof(PARTITION_TABLE_ENTRY) * 4);
@@ -581,5 +584,6 @@ bool FST_Unmount() {
         partitions = NULL;
     }
     current = root;
+    aescache_end = 0;
     return !RemoveDevice("fst:/");
 }
