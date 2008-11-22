@@ -364,14 +364,14 @@ s32 send_from_file(s32 s, FILE *f) {
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
         if (result < 0) {
-            printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+            // printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
             goto end;
         }
     }
     if (bytes_read < FREAD_BUFFER_SIZE) {
         result = -!feof(f);
         if (result < 0) {
-            printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            // printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
         }
         goto end;
     }
@@ -387,7 +387,7 @@ s32 recv_to_file(s32 s, FILE *f) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read != -EAGAIN) {
-                printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+                // printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
             }
             return bytes_read;
         } else if (bytes_read == 0) {
@@ -396,7 +396,7 @@ s32 recv_to_file(s32 s, FILE *f) {
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
-            printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            // printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
             return -1;
         }
     }
