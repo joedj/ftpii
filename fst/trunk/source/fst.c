@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <di/di.h>
 #include <errno.h>
+#include <ogc/es.h>
 #include <ogcsys.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,18 +34,32 @@ misrepresented as being the original software.
 #include <sys/iosupport.h>
 
 #include "fst.h"
+#include "rijndael.h"
 
 #define FLAG_DIR 1
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
 #define BUFFER_SIZE 0x8000
 
+struct fst_info {
+    u32 dol_offset;
+    u32 fst_offset;
+    u32 fst_size;
+    u32 fst_size2;
+} __attribute__ ((packed));
+
+typedef struct {
+    u32 offset;
+    aeskey key;
+    struct fst_info fst_info;
+} PARTITION;
+
 typedef struct DIR_ENTRY_STRUCT {
     char name[FST_MAXPATHLEN];
-	u32 partition_offset;
-    u32 offset; // for files this is the offset of the file payload in the disc partition, for directories it is the index of the entry in the fst
+    PARTITION *partition;
+    u32 offset; // for files this is the offset of the file payload in the disc partition >> 2, for directories it is the index of the entry in the fst
     u32 size;
-	u8 flags;
+    u8 flags;
     u32 fileCount;
     struct DIR_ENTRY_STRUCT *children;
 } DIR_ENTRY;
@@ -65,9 +80,10 @@ static unsigned char read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
+static PARTITION *partitions = NULL;
 
 static bool is_dir(DIR_ENTRY *entry) {
-	return entry->flags & FLAG_DIR;
+    return entry->flags & FLAG_DIR;
 }
 
 static DIR_ENTRY *entry_from_path(const char *path) {
@@ -148,14 +164,54 @@ static int _FST_close_r(struct _reent *r, int fd) {
 }
 
 static int _read(void *ptr, u64 offset, u32 len) {
-	u32 sector = offset / SECTOR_SIZE;
+    u32 sector = offset / SECTOR_SIZE;
     u32 sector_offset = offset % SECTOR_SIZE;
     len = MIN(BUFFER_SIZE - sector_offset, len);
     u32 end_sector = (offset + len - 1) / SECTOR_SIZE;
     u32 sectors = end_sector - sector + 1;
-	if (DI_ReadDVD(read_buffer, sectors, sector)) return -1;
+    if (DI_ReadDVD(read_buffer, sectors, sector)) return -1;
     memcpy(ptr, read_buffer + sector_offset, len);
     return len;
+}
+
+#define CLUSTER_HEADER_SIZE 0x400
+#define ENCRYPTED_CLUSTER_SIZE 0x8000
+#define PLAINTEXT_CLUSTER_SIZE (ENCRYPTED_CLUSTER_SIZE - CLUSTER_HEADER_SIZE)
+
+static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
+
+static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset) {
+    u32 bytes_read = _read(buf, offset, ENCRYPTED_CLUSTER_SIZE);
+    if (bytes_read < 0) return false;
+    if (bytes_read != ENCRYPTED_CLUSTER_SIZE) {
+        printf("Going for 2nd read...\n");
+        u32 bytes_in_2nd_read = _read(buf + bytes_read, offset + bytes_read, ENCRYPTED_CLUSTER_SIZE - bytes_read);
+        if (bytes_in_2nd_read < 0) return false;
+        bytes_read += bytes_in_2nd_read;
+        if (bytes_read != ENCRYPTED_CLUSTER_SIZE) {
+            printf("BUG: could not read cluster in 2 _reads\n");
+            return false;
+        }
+    }
+
+    u8 *iv = buf + 0x3d0;
+    u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
+    u8 outbuf[PLAINTEXT_CLUSTER_SIZE];
+    aes_set_key(title_key);
+    aes_decrypt(iv, inbuf, outbuf, PLAINTEXT_CLUSTER_SIZE);
+    memcpy(buf, outbuf, PLAINTEXT_CLUSTER_SIZE);
+    return true;
+}
+
+static u64 plaintext_to_cipher(u64 offset) {
+    u32 clusters = offset / PLAINTEXT_CLUSTER_SIZE;
+    u32 remainder = offset % PLAINTEXT_CLUSTER_SIZE;
+    u64 cipher_offset = (u64)clusters * ENCRYPTED_CLUSTER_SIZE;
+    if (remainder || !clusters) {
+        cipher_offset += CLUSTER_HEADER_SIZE;
+        cipher_offset += remainder;
+    }
+    return cipher_offset;
 }
 
 static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
@@ -176,16 +232,19 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
         return 0;
     }
 
-	u32 real_offset = file->entry->offset + file->offset;
-	u32 read_offset = real_offset / 4 << 2;
-	u32 buffer_offset = real_offset % 4;
-    len = MIN(BUFFER_SIZE - buffer_offset, len);
-	if (DI_OpenPartition(file->entry->partition_offset) || DI_Read(read_buffer, len, read_offset) || DI_ClosePartition()) {
-		r->_errno = EIO;
-		return -1;
-	}
-    memcpy(ptr, read_buffer + buffer_offset, len);
-	file->offset += len;
+    u64 offset_in_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
+    u32 offset_from_cluster_in_data = offset_in_data % ENCRYPTED_CLUSTER_SIZE;
+    len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster_in_data, len);
+    u64 cluster_offset_in_data = (offset_in_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
+    u64 data_offset = (file->entry->partition->offset << 2LL) + 0x20000;
+    // u8 cluster_buffer[PLAINTEXT_CLUSTER_SIZE];
+    _break();
+    if (!read_and_decrypt_cluster(file->entry->partition->key, cluster_buffer, data_offset + cluster_offset_in_data)) {
+        r->_errno = EIO;
+        return -1;
+    }
+    memcpy(ptr, cluster_buffer + offset_from_cluster_in_data - CLUSTER_HEADER_SIZE, len);
+    file->offset += len;
     return len;
 }
 
@@ -403,116 +462,137 @@ struct disc_header {
 } __attribute__((packed));
 
 struct partition_info {
-	u32 count;
-	u32 table_offset;
+    u32 count;
+    u32 table_offset;
 } __attribute__((packed));
 
 struct partition_table_entry {
-	u32 offset;
-	u32 type;
+    u32 offset;
+    u32 type;
 } __attribute__((packed));
 
-struct fst_info {
-	u32 dol_offset;
-	u32 fst_offset;
-	u32 fst_size;
-	u32 fst_size2;
-} __attribute__ ((packed));
-
 typedef struct {
-	u8 filetype;
-	char name_offset[3];
-	u32 fileoffset;	// 	file_offset or parent_offset (dir)
-	u32 filelen;	// 	file_length or num_entries (root) or next_offset (dir)
+    u8 filetype;
+    char name_offset[3];
+    u32 fileoffset;    //     file_offset or parent_offset (dir)
+    u32 filelen;    //     file_length or num_entries (root) or next_offset (dir)
 } __attribute__((packed)) FST;
 
 static DIR_ENTRY *entry_from_index(DIR_ENTRY *entry, u32 index) {
-	if (entry->offset == index) return entry;
-	u32 i;
-	for (i = 0; i < entry->fileCount; i++) {
-		if (is_dir(&entry->children[i])) {
-			DIR_ENTRY *match = entry_from_index(&entry->children[i], index);
-			if (match) return match;
-		}
-	}
-	return NULL;
+    if (entry->offset == index) return entry;
+    u32 i;
+    for (i = 0; i < entry->fileCount; i++) {
+        if (is_dir(&entry->children[i])) {
+            DIR_ENTRY *match = entry_from_index(&entry->children[i], index);
+            if (match) return match;
+        }
+    }
+    return NULL;
 }
 
 static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
-	DIR_ENTRY *newChildren = realloc(dir->children, (dir->fileCount + 1) * sizeof(DIR_ENTRY));
-	if (!newChildren) return NULL;
+    DIR_ENTRY *newChildren = realloc(dir->children, (dir->fileCount + 1) * sizeof(DIR_ENTRY));
+    if (!newChildren) return NULL;
     bzero(newChildren + dir->fileCount, sizeof(DIR_ENTRY));
-	dir->children = newChildren;
-	DIR_ENTRY *child = &dir->children[dir->fileCount++];
-	child->partition_offset = dir->partition_offset;
-	return child;
+    dir->children = newChildren;
+    DIR_ENTRY *child = &dir->children[dir->fileCount++];
+    child->partition = dir->partition;
+    return child;
 }
 
 static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
-	if (DI_Read(read_buffer, sizeof(FST), fst_offset)) return false;
-	FST *fst = (FST *)read_buffer;
-	u32 no_fst_entries = fst->filelen;
-	u32 name_table_offset = no_fst_entries * sizeof(FST);
-	char *name_table = (char *)read_buffer + name_table_offset;
-	if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false; // TODO: make sure to read all of it...
-	DIR_ENTRY *current_dir = partition;
-	u32 i;
-	for (i = 1; i < no_fst_entries; i++) {
-		fst++;
-		DIR_ENTRY *child;
-		u32 name_offset = (fst->name_offset[0] << 16) | (fst->name_offset[1] << 8) | fst->name_offset[2];
-		if (fst->filetype & FLAG_DIR) {
-			DIR_ENTRY *parent = entry_from_index(partition, fst->fileoffset);
-			if (!parent) return false;
-			current_dir = child = add_child_entry(parent);
-			if (!child) return false;
-			child->offset = i;
-		} else {
-			child = add_child_entry(current_dir);
-			if (!child) return false;
-			child->offset = fst->fileoffset;
-			child->size = fst->filelen;
-		}
-		child->flags = fst->filetype;
-		strcpy(child->name, name_table + name_offset);
-	}
-	return true;
+    if (DI_Read(read_buffer, sizeof(FST), fst_offset)) return false;
+    FST *fst = (FST *)read_buffer;
+    u32 no_fst_entries = fst->filelen;
+    u32 name_table_offset = no_fst_entries * sizeof(FST);
+    char *name_table = (char *)read_buffer + name_table_offset;
+    if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false; // TODO: make sure to read all of it...
+    DIR_ENTRY *current_dir = partition;
+    u32 i;
+    for (i = 1; i < no_fst_entries; i++) {
+        fst++;
+        DIR_ENTRY *child;
+        u32 name_offset = (fst->name_offset[0] << 16) | (fst->name_offset[1] << 8) | fst->name_offset[2];
+        if (fst->filetype & FLAG_DIR) {
+            DIR_ENTRY *parent = entry_from_index(partition, fst->fileoffset);
+            if (!parent) return false;
+            current_dir = child = add_child_entry(parent);
+            if (!child) return false;
+            child->offset = i;
+        } else {
+            child = add_child_entry(current_dir);
+            if (!child) return false;
+            child->offset = fst->fileoffset;
+            child->size = fst->filelen;
+        }
+        child->flags = fst->filetype;
+        strcpy(child->name, name_table + name_offset);
+    }
+    return true;
 }
 
-static bool read_fst() {
-	if (DI_ReadDVD(read_buffer, 1, 128)) return false;
-	struct partition_info infos[4];
-	memcpy(infos, read_buffer, sizeof(struct partition_info) * 4);
-	u32 table_index;
-	u32 partition_number = 0;
+#define COMMON_AES_KEY ((u8*)"\xeb\xe4\x2a\x22\x5e\x85\x93\xe4\x48\xd9\xc5\x45\x73\x81\xaa\xf7")
 
-	if (!(root = malloc(sizeof(DIR_ENTRY)))) return false;
-	bzero(root, sizeof(DIR_ENTRY));
-	root->flags = FLAG_DIR;
-	current = root;
+static bool read_title_key(aeskey title_key, u32 partition_offset) {
+    tik ticket;
+    if (_read(&ticket, (partition_offset << 2) + 0x140, sizeof(tik)) != sizeof(tik)) return false;
+    u8 iv[16];
+    bzero(iv, 16);
+    memcpy(iv, &ticket.titleid, sizeof(ticket.titleid));
+    aes_set_key(COMMON_AES_KEY);
+    aes_decrypt(iv, ticket.cipher_title_key, title_key, 16);
+    return true;
+}
 
-	for (table_index = 0; table_index < 4; table_index++) {
-		u32 count = infos[table_index].count;
-		if (count > 0) {
-			struct partition_table_entry entries[count];
-			if (_read(entries, (u64)infos[table_index].table_offset << 2, sizeof(struct partition_table_entry) * count) < 0) return false; // read table entries
-			u32 partition_index;
-			for (partition_index = 0; partition_index < count; partition_index++) {
-				DIR_ENTRY *partition = add_child_entry(root);
-				if (!partition) return false;
-				sprintf(partition->name, "%u", partition_number);
-				partition->flags = FLAG_DIR;
-				partition->partition_offset = entries[partition_index].offset;
-				if (DI_OpenPartition(partition->partition_offset)) return false;
-				if (DI_Read(read_buffer, sizeof(struct fst_info), 0x420 >> 2)) return false;
-				struct fst_info *fst_info = (struct fst_info *)read_buffer;
-				if (!read_partition(partition, fst_info->fst_offset)) return false;
-				if (DI_ClosePartition()) return false;
-				partition_number++;
-			}
-		}
-	}
-	return true;
+static bool read_disc() {
+    if (DI_ReadDVD(read_buffer, 1, 128)) return false;
+    struct partition_info infos[4];
+    memcpy(infos, read_buffer, sizeof(struct partition_info) * 4);
+    u32 table_index;
+    u32 partition_count = 0;
+
+    if (!(root = malloc(sizeof(DIR_ENTRY)))) return false;
+    bzero(root, sizeof(DIR_ENTRY));
+    root->flags = FLAG_DIR;
+    current = root;
+
+    for (table_index = 0; table_index < 4; table_index++) {
+        u32 count = infos[table_index].count;
+        if (count > 0) {
+            struct partition_table_entry entries[count];
+            u32 table_size = sizeof(struct partition_table_entry) * count;
+            if (_read(entries, (u64)infos[table_index].table_offset << 2, table_size) != table_size) return false;
+            u32 partition_index;
+            for (partition_index = 0; partition_index < count; partition_index++) {
+                PARTITION *newPartitions = realloc(partitions, sizeof(PARTITION) * (partition_count + 1));
+                if (!newPartitions) return false;
+                partitions = newPartitions;
+                bzero(partitions + partition_count, sizeof(PARTITION));
+                PARTITION *partition = partitions + partition_count;
+                DIR_ENTRY *partition_entry = add_child_entry(root);
+                if (!partition_entry) return false;
+                sprintf(partition_entry->name, "%u", partition_count);
+                partition_entry->flags = FLAG_DIR;
+                partition_entry->partition = partition;
+                partition->offset = entries[partition_index].offset;
+                if (!read_title_key(partition->key, partition->offset)) return false;
+
+                if (DI_OpenPartition(partition->offset)) return false;
+                if (DI_Read(read_buffer, sizeof(struct fst_info), 0x420 >> 2)) {
+                    DI_ClosePartition();
+                    return false;
+                }
+                memcpy(&partition->fst_info, read_buffer, sizeof(struct fst_info));
+                if (!read_partition(partition_entry, partition->fst_info.fst_offset)) {
+                    DI_ClosePartition();
+                    return false;
+                }
+                if (DI_ClosePartition()) return false;
+                partition_count++;
+            }
+        }
+    }
+    return true;
 }
 
 static void cleanup_recursive(DIR_ENTRY *entry) {
@@ -525,17 +605,21 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
 
 bool FST_Mount() {
     FST_Unmount();
-    bool success = read_fst() && AddDevice(&dotab_fst) >= 0;
+    bool success = read_disc() && AddDevice(&dotab_fst) >= 0;
     if (!success) FST_Unmount();
     return success;
 }
 
 bool FST_Unmount() {
-	if (root) {
-		cleanup_recursive(root);
-		free(root);
-		root = NULL;
-	}
-	current = root;
+    if (root) {
+        cleanup_recursive(root);
+        free(root);
+        root = NULL;
+    }
+    if (partitions) {
+        free(partitions);
+        partitions = NULL;
+    }
+    current = root;
     return !RemoveDevice("fst:/");
 }
