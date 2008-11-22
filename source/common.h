@@ -28,8 +28,9 @@ misrepresented as being the original software.
 #include <network.h>
 #include <ogcsys.h>
 #include <stdio.h>
+#include <sys/dir.h>
 
-const char *VIRTUAL_PARTITION_ALIASES[4];
+const char *VIRTUAL_PARTITION_ALIASES[7];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 bool initialise_fat();
@@ -52,7 +53,15 @@ u32 check_gamecube(u32 mask);
 
 void initialise_video();
 
-bool mounted(PARTITION_INTERFACE partition);
+void to_real_prefix(char *prefix, int virtual_device_index);
+
+bool mounted(int virtual_device_index);
+
+bool dvd_mountWait();
+
+void set_dvd_mountWait(bool state);
+
+s32 dvd_eject();
 
 void process_remount_event();
 
@@ -78,6 +87,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
 char *dirname(char *path);
 char *basename(char *path);
+u64 stat_size(struct stat *st);
 
 extern u32 net_gethostip();
 
