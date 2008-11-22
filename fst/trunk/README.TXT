@@ -24,7 +24,7 @@ environment that it is:
 
 http://code.google.com/p/ftpii/
 
-ftpii is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
+libfst is written and maintained by Joe Jordan <joe.ftpii@psychlaw.com.au>
 joedj @ EFNet #wiidev
 
 
@@ -32,4 +32,4 @@ joedj @ EFNet #wiidev
 
 For subversion changes, see http://code.google.com/p/ftpii/source/list
 
-20081120 0.0.1  Public release.
+20081122 0.0.1  Public release.

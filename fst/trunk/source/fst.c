@@ -61,7 +61,7 @@ typedef struct {
 typedef struct DIR_ENTRY_STRUCT {
     char name[FST_MAXPATHLEN];
     u32 partition;
-    u32 offset; // for files this is the offset of the file payload in the disc partition >> 2, for directories it is the index of the entry in the fst
+    u32 offset; // offset in partition >> 2, or fst index for dirs
     u32 size;
     u8 flags;
     u32 fileCount;
