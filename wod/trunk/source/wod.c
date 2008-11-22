@@ -181,13 +181,13 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
         file->offset += len;
         return len;
     }
-    if (DI_ReadDVD(read_buffer, 16, sector)) {
+    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
         cache_sectors = 0;
         r->_errno = EIO;
         return -1;
     }
     cache_start = sector;
-    cache_sectors = 16;
+    cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
     memcpy(ptr, read_buffer + sector_offset, len);
     file->offset += len;
     return len;
