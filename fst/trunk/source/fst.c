@@ -183,17 +183,7 @@ static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
 static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset) {
     u32 bytes_read = _read(buf, offset, ENCRYPTED_CLUSTER_SIZE);
     if (bytes_read < 0) return false;
-    if (bytes_read != ENCRYPTED_CLUSTER_SIZE) {
-        printf("Going for 2nd read...\n");
-        u32 bytes_in_2nd_read = _read(buf + bytes_read, offset + bytes_read, ENCRYPTED_CLUSTER_SIZE - bytes_read);
-        if (bytes_in_2nd_read < 0) return false;
-        bytes_read += bytes_in_2nd_read;
-        if (bytes_read != ENCRYPTED_CLUSTER_SIZE) {
-            printf("BUG: could not read cluster in 2 _reads\n");
-            return false;
-        }
-    }
-
+    if (bytes_read != ENCRYPTED_CLUSTER_SIZE) return false;
     u8 *iv = buf + 0x3d0;
     u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
     u8 outbuf[PLAINTEXT_CLUSTER_SIZE];
