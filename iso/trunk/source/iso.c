@@ -61,6 +61,8 @@ typedef struct {
 } DIR_STATE_STRUCT;
 
 static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
+static u32 cache_start = 0;
+static u32 cache_sectors = 0;
 
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
@@ -166,14 +168,22 @@ static int _ISO9660_read_r(struct _reent *r, int fd, char *ptr, int len) {
     }
 
     u32 sector = file->entry->sector + file->offset / SECTOR_SIZE;
-    u32 end_sector = (file->entry->sector * SECTOR_SIZE + file->offset + len - 1) / SECTOR_SIZE;
+    u32 end_sector = ((u64)file->entry->sector * SECTOR_SIZE + file->offset + len - 1) / SECTOR_SIZE;
     u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
     u32 sector_offset = file->offset % SECTOR_SIZE;
     len = MIN(BUFFER_SIZE - sector_offset, len);
-    if (DI_ReadDVD(read_buffer, sectors, sector)) {
+    if (cache_sectors && sector >= cache_start && (sector + sectors) <= (cache_start + cache_sectors)) {
+        memcpy(ptr, read_buffer + (sector - cache_start) * SECTOR_SIZE + sector_offset, len);
+        file->offset += len;
+        return len;
+    }
+    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
+        cache_sectors = 0;
         r->_errno = EIO;
         return -1;
     }
+    cache_start = sector;
+    cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
     memcpy(ptr, read_buffer + sector_offset, len);
     file->offset += len;
     return len;
@@ -483,5 +493,6 @@ bool ISO9660_Unmount() {
     }
     current = root;
     unicode = false;
+    cache_sectors = 0;
     return !RemoveDevice("dvd:/");
 }
