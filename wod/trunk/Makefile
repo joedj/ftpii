@@ -15,7 +15,7 @@ include $(DEVKITPPC)/wii_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	$(notdir $(CURDIR))
+TARGET		:=	wod
 BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
@@ -105,7 +105,7 @@ $(BUILD):
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD)
-	@rm -f libwod.a
+	@rm -f lib$(TARGET).a
 #---------------------------------------------------------------------------------
 run:
 	wiiload $(OUTPUT).dol
@@ -114,9 +114,9 @@ run:
 
 install:
 	@echo Installing ...
-	@mkdir -p $(LIBOGC_INC)/wod
-	@install -v -m 644 libwod.a $(LIBOGC_LIB)
-	@install -v -m 644 source/wod.h $(LIBOGC_INC)/wod
+	@mkdir -p $(LIBOGC_INC)/$(TARGET)
+	@install -v -m 644 lib$(TARGET).a $(LIBOGC_LIB)
+	@install -v -m 644 source/$(TARGET).h $(LIBOGC_INC)/$(TARGET)
 #---------------------------------------------------------------------------------
 else
 

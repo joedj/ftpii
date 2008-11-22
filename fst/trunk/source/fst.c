@@ -41,22 +41,26 @@ misrepresented as being the original software.
 #define SECTOR_SIZE 0x800
 #define BUFFER_SIZE 0x8000
 
-struct fst_info {
+#define CLUSTER_HEADER_SIZE 0x400
+#define ENCRYPTED_CLUSTER_SIZE 0x8000
+#define PLAINTEXT_CLUSTER_SIZE (ENCRYPTED_CLUSTER_SIZE - CLUSTER_HEADER_SIZE)
+
+typedef struct {
     u32 dol_offset;
     u32 fst_offset;
     u32 fst_size;
     u32 fst_size2;
-} __attribute__ ((packed));
+} __attribute__ ((packed)) FST_INFO;
 
 typedef struct {
     u32 offset;
     aeskey key;
-    struct fst_info fst_info;
+    FST_INFO fst_info;
 } PARTITION;
 
 typedef struct DIR_ENTRY_STRUCT {
     char name[FST_MAXPATHLEN];
-    u32 partition_idx;
+    u32 partition;
     u32 offset; // for files this is the offset of the file payload in the disc partition >> 2, for directories it is the index of the entry in the fst
     u32 size;
     u8 flags;
@@ -77,6 +81,7 @@ typedef struct {
 } DIR_STATE_STRUCT;
 
 static unsigned char read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
+static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
 
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
@@ -174,16 +179,9 @@ static int _read(void *ptr, u64 offset, u32 len) {
     return len;
 }
 
-#define CLUSTER_HEADER_SIZE 0x400
-#define ENCRYPTED_CLUSTER_SIZE 0x8000
-#define PLAINTEXT_CLUSTER_SIZE (ENCRYPTED_CLUSTER_SIZE - CLUSTER_HEADER_SIZE)
-
-static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
-
 static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
     u32 end = offset_from_cluster + len;
     u32 bytes_read = _read(buf, offset, end);
-    if (bytes_read < 0) return false;
     if (bytes_read != end) return false;
     u8 *iv = buf + 0x3d0;
     u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
@@ -216,12 +214,12 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
         return 0;
     }
 
-    u64 offset_in_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
-    u32 offset_from_cluster = offset_in_data % ENCRYPTED_CLUSTER_SIZE;
+    u64 offset_from_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
+    u64 cluster_offset_from_data = (offset_from_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
+    u32 offset_from_cluster = offset_from_data % ENCRYPTED_CLUSTER_SIZE;
     len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster, len);
-    u64 cluster_offset_in_data = (offset_in_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
-    u64 data_offset = (partitions[file->entry->partition_idx].offset << 2LL) + 0x20000;
-    if (!read_and_decrypt_cluster(partitions[file->entry->partition_idx].key, cluster_buffer, data_offset + cluster_offset_in_data, offset_from_cluster, len)) {
+    u64 data_offset = (partitions[file->entry->partition].offset << 2LL) + 0x20000;
+    if (!read_and_decrypt_cluster(partitions[file->entry->partition].key, cluster_buffer, data_offset + cluster_offset_from_data, offset_from_cluster, len)) {
         r->_errno = EIO;
         return -1;
     }
@@ -373,60 +371,30 @@ static int _FST_dirclose_r(struct _reent *r, DIR_ITER *dirState) {
     return 0;
 }
 
-static int _FST_statvfs_r(struct _reent *r, const char *path, struct statvfs *buf) {
-    r->_errno = ENOTSUP;
-    return -1;
-}
-
-static int _FST_write_r(struct _reent *r, int fd, const char *ptr, int len) {
-    r->_errno = EBADF;
-    return -1;
-}
-
-static int _FST_link_r(struct _reent *r, const char *existing, const char *newLink) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _FST_unlink_r(struct _reent *r, const char *path) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _FST_rename_r(struct _reent *r, const char *oldName, const char *newName) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _FST_mkdir_r(struct _reent *r, const char *path, int mode) {
-    r->_errno = EROFS;
-    return -1;
-}
-
 static const devoptab_t dotab_fst = {
     "fst",
     sizeof(FILE_STRUCT),
     _FST_open_r,
     _FST_close_r,
-    _FST_write_r,
+    NULL,
     _FST_read_r,
     _FST_seek_r,
     _FST_fstat_r,
     _FST_stat_r,
-    _FST_link_r,
-    _FST_unlink_r,
+    NULL,
+    NULL,
     _FST_chdir_r,
-    _FST_rename_r,
-    _FST_mkdir_r,
+    NULL,
+    NULL,
     sizeof(DIR_STATE_STRUCT),
     _FST_diropen_r,
     _FST_dirreset_r,
     _FST_dirnext_r,
     _FST_dirclose_r,
-    _FST_statvfs_r
+    NULL
 };
 
-struct disc_header {
+typedef struct {
     u8 disc_id;
     u8 game_code[2];
     u8 region_code;
@@ -441,24 +409,24 @@ struct disc_header {
     u8 title[64];
     u8 disable_hashes;
     u8 disable_encryption;
-} __attribute__((packed));
+} __attribute__((packed)) DISC_HEADER;
 
-struct partition_info {
+typedef struct {
     u32 count;
     u32 table_offset;
-} __attribute__((packed));
+} __attribute__((packed)) PARTITION_TABLE_ENTRY;
 
-struct partition_table_entry {
+typedef struct {
     u32 offset;
     u32 type;
-} __attribute__((packed));
+} __attribute__((packed)) PARTITION_ENTRY;
 
 typedef struct {
     u8 filetype;
     char name_offset[3];
-    u32 fileoffset;    //     file_offset or parent_offset (dir)
-    u32 filelen;    //     file_length or num_entries (root) or next_offset (dir)
-} __attribute__((packed)) FST;
+    u32 fileoffset;
+    u32 filelen;
+} __attribute__((packed)) FST_ENTRY;
 
 static DIR_ENTRY *entry_from_index(DIR_ENTRY *entry, u32 index) {
     if (entry->offset == index) return entry;
@@ -478,15 +446,15 @@ static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
     bzero(newChildren + dir->fileCount, sizeof(DIR_ENTRY));
     dir->children = newChildren;
     DIR_ENTRY *child = &dir->children[dir->fileCount++];
-    child->partition_idx = dir->partition_idx;
+    child->partition = dir->partition;
     return child;
 }
 
 static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
-    if (DI_Read(read_buffer, sizeof(FST), fst_offset)) return false;
-    FST *fst = (FST *)read_buffer;
+    if (DI_Read(read_buffer, sizeof(FST_ENTRY), fst_offset)) return false;
+    FST_ENTRY *fst = (FST_ENTRY *)read_buffer;
     u32 no_fst_entries = fst->filelen;
-    u32 name_table_offset = no_fst_entries * sizeof(FST);
+    u32 name_table_offset = no_fst_entries * sizeof(FST_ENTRY);
     char *name_table = (char *)read_buffer + name_table_offset;
     if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false; // TODO: make sure to read all of it...
     DIR_ENTRY *current_dir = partition;
@@ -528,8 +496,8 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
 
 static bool read_disc() {
     if (DI_ReadDVD(read_buffer, 1, 128)) return false;
-    struct partition_info infos[4];
-    memcpy(infos, read_buffer, sizeof(struct partition_info) * 4);
+    PARTITION_TABLE_ENTRY tables[4];
+    memcpy(tables, read_buffer, sizeof(PARTITION_TABLE_ENTRY) * 4);
     u32 table_index;
     u32 partition_count = 0;
 
@@ -539,11 +507,11 @@ static bool read_disc() {
     current = root;
 
     for (table_index = 0; table_index < 4; table_index++) {
-        u32 count = infos[table_index].count;
+        u32 count = tables[table_index].count;
         if (count > 0) {
-            struct partition_table_entry entries[count];
-            u32 table_size = sizeof(struct partition_table_entry) * count;
-            if (_read(entries, (u64)infos[table_index].table_offset << 2, table_size) != table_size) return false;
+            PARTITION_ENTRY entries[count];
+            u32 table_size = sizeof(PARTITION_ENTRY) * count;
+            if (_read(entries, (u64)tables[table_index].table_offset << 2, table_size) != table_size) return false;
             u32 partition_index;
             for (partition_index = 0; partition_index < count; partition_index++) {
                 PARTITION *newPartitions = realloc(partitions, sizeof(PARTITION) * (partition_count + 1));
@@ -555,16 +523,16 @@ static bool read_disc() {
                 if (!partition_entry) return false;
                 sprintf(partition_entry->name, "%u", partition_count);
                 partition_entry->flags = FLAG_DIR;
-                partition_entry->partition_idx = partition_count;
+                partition_entry->partition = partition_count;
                 partition->offset = entries[partition_index].offset;
                 if (!read_title_key(partition->key, partition->offset)) return false;
 
                 if (DI_OpenPartition(partition->offset)) return false;
-                if (DI_Read(read_buffer, sizeof(struct fst_info), 0x420 >> 2)) {
+                if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) {
                     DI_ClosePartition();
                     return false;
                 }
-                memcpy(&partition->fst_info, read_buffer, sizeof(struct fst_info));
+                memcpy(&partition->fst_info, read_buffer, sizeof(FST_INFO));
                 if (!read_partition(partition_entry, partition->fst_info.fst_offset)) {
                     DI_ClosePartition();
                     return false;

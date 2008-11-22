@@ -203,7 +203,7 @@ static int _ISO9660_seek_r(struct _reent *r, int fd, int pos, int dir) {
             return -1;
     }
     
-    if ((pos > 0) && (position < 0)) {
+    if (pos > 0 && position < 0) {
         r->_errno = EOVERFLOW;
         return -1;
     }
@@ -323,57 +323,27 @@ static int _ISO9660_dirclose_r(struct _reent *r, DIR_ITER *dirState) {
     return 0;
 }
 
-static int _ISO9660_statvfs_r(struct _reent *r, const char *path, struct statvfs *buf) {
-    r->_errno = ENOTSUP;
-    return -1;
-}
-
-static int _ISO9660_write_r(struct _reent *r, int fd, const char *ptr, int len) {
-    r->_errno = EBADF;
-    return -1;
-}
-
-static int _ISO9660_link_r(struct _reent *r, const char *existing, const char *newLink) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _ISO9660_unlink_r(struct _reent *r, const char *path) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _ISO9660_rename_r(struct _reent *r, const char *oldName, const char *newName) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _ISO9660_mkdir_r(struct _reent *r, const char *path, int mode) {
-    r->_errno = EROFS;
-    return -1;
-}
-
 static const devoptab_t dotab_iso9660 = {
     "dvd",
     sizeof(FILE_STRUCT),
     _ISO9660_open_r,
     _ISO9660_close_r,
-    _ISO9660_write_r,
+    NULL,
     _ISO9660_read_r,
     _ISO9660_seek_r,
     _ISO9660_fstat_r,
     _ISO9660_stat_r,
-    _ISO9660_link_r,
-    _ISO9660_unlink_r,
+    NULL,
+    NULL,
     _ISO9660_chdir_r,
-    _ISO9660_rename_r,
-    _ISO9660_mkdir_r,
+    NULL,
+    NULL,
     sizeof(DIR_STATE_STRUCT),
     _ISO9660_diropen_r,
     _ISO9660_dirreset_r,
     _ISO9660_dirnext_r,
     _ISO9660_dirclose_r,
-    _ISO9660_statvfs_r
+    NULL
 };
 
 #define OFFSET_EXTENDED 1
@@ -449,7 +419,7 @@ static bool read_recursive(DIR_ENTRY *entry) {
     return true;
 }
 
-struct volume_descriptor {
+typedef struct {
     char id[8];
     char system_id[32];
     char volume_id[32];
@@ -464,14 +434,14 @@ struct volume_descriptor {
     u8 root[34];
     char volume_set_id[128], publisher_id[128], data_preparer_id[128], application_id[128];
     char copyright_file_id[37], abstract_file_id[37], bibliographical_file_id[37];
-}  __attribute__((packed));
+} __attribute__((packed)) VOLUME_DESCRIPTOR;
 
-struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
+static VOLUME_DESCRIPTOR *read_volume_descriptor(u8 descriptor) {
     u8 sector;
     for (sector = 16; sector < 32; sector++) {
         if (DI_ReadDVD(read_buffer, 1, sector)) return NULL;
         if (!memcmp(read_buffer + 1, "CD001\1", 6)) {
-            if (*read_buffer == descriptor) return (struct volume_descriptor *)read_buffer;
+            if (*read_buffer == descriptor) return (VOLUME_DESCRIPTOR *)read_buffer;
             else if (*read_buffer == 0xff) return NULL;
         }
 
@@ -480,7 +450,7 @@ struct volume_descriptor *read_volume_descriptor(u8 descriptor) {
 }
 
 static bool read_directories() {
-    struct volume_descriptor *volume = read_volume_descriptor(2);
+    VOLUME_DESCRIPTOR *volume = read_volume_descriptor(2);
     if (volume) unicode = true;
     else if (!(volume = read_volume_descriptor(1))) return false;
     if (!(root = malloc(sizeof(DIR_ENTRY)))) return false;

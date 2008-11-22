@@ -15,7 +15,7 @@ include $(DEVKITPPC)/wii_rules
 # SOURCES is a list of directories containing source code
 # INCLUDES is a list of directories containing extra header files
 #---------------------------------------------------------------------------------
-TARGET		:=	$(notdir $(CURDIR))
+TARGET		:=	iso
 BUILD		:=	build
 SOURCES		:=	source
 DATA		:=	data
@@ -105,7 +105,7 @@ $(BUILD):
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD)
-	@rm -f libiso.a
+	@rm -f lib$(TARGET).a
 #---------------------------------------------------------------------------------
 run:
 	wiiload $(OUTPUT).dol
@@ -114,9 +114,9 @@ run:
 
 install:
 	@echo Installing ...
-	@mkdir -p $(LIBOGC_INC)/iso
-	@install -v -m 644 libiso.a $(LIBOGC_LIB)
-	@install -v -m 644 source/iso.h $(LIBOGC_INC)/iso
+	@mkdir -p $(LIBOGC_INC)/$(TARGET)
+	@install -v -m 644 lib$(TARGET).a $(LIBOGC_LIB)
+	@install -v -m 644 source/$(TARGET).h $(LIBOGC_INC)/$(TARGET)
 #---------------------------------------------------------------------------------
 else
 

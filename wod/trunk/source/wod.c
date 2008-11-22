@@ -42,10 +42,10 @@ misrepresented as being the original software.
 #define REGION_CODE_PAL 'P'
 #define REGION_CODE_JAP 'J'
 
-static const char *REGION_NAME_USA = "USA";
-static const char *REGION_NAME_PAL = "PAL";
-static const char *REGION_NAME_JAP = "JAP";
-static const char *REGION_NAME_UNKNOWN = "Unknown region";
+#define REGION_NAME_USA "USA"
+#define REGION_NAME_PAL "PAL"
+#define REGION_NAME_JAP "JAP"
+#define REGION_NAME_UNKNOWN "Unknown region"
 
 #define DISC_TYPE_GC          'G'
 #define DISC_TYPE_GC_WIIKEY   'W'
@@ -58,21 +58,21 @@ static const char *REGION_NAME_UNKNOWN = "Unknown region";
 #define DISC_TYPE_WII_BACKUP  '4'
 #define DISC_TYPE_WII_WIIFIT  '_'
 
-static const char *DISC_NAME_GC          = "GameCube";
-static const char *DISC_NAME_GC_WIIKEY   = "GameCube WiiKey config";
-static const char *DISC_NAME_GC_UTIL     = "GameCube util";
-static const char *DISC_NAME_GC_DEMO     = "GameCube demo";
-static const char *DISC_NAME_GC_PROMO    = "GameCube promo";
-static const char *DISC_NAME_WII         = "Wii";
-static const char *DISC_NAME_WII_AUTO    = "Wii auto-boot";
-static const char *DISC_NAME_WII_UNKNOWN = "Wii unknown";
-static const char *DISC_NAME_WII_BACKUP  = "Wii backup";
-static const char *DISC_NAME_WII_WIIFIT  = "WiiFit channel installer";
-static const char *DISC_NAME_WII_DUAL    = "Wii dual-layer";
-static const char *DISC_NAME_UNKNOWN     = "Unknown disc type";
+#define DISC_NAME_GC          "GameCube"
+#define DISC_NAME_GC_WIIKEY   "GameCube WiiKey config"
+#define DISC_NAME_GC_UTIL     "GameCube util"
+#define DISC_NAME_GC_DEMO     "GameCube demo"
+#define DISC_NAME_GC_PROMO    "GameCube promo"
+#define DISC_NAME_WII         "Wii"
+#define DISC_NAME_WII_AUTO    "Wii auto-boot"
+#define DISC_NAME_WII_UNKNOWN "Wii unknown"
+#define DISC_NAME_WII_BACKUP  "Wii backup"
+#define DISC_NAME_WII_WIIFIT  "WiiFit channel installer"
+#define DISC_NAME_WII_DUAL    "Wii dual-layer"
+#define DISC_NAME_UNKNOWN     "Unknown disc type"
 
-static const u8 DISC_VERSION_SINGLE = 0;
-static const u8 DISC_VERSION_DUAL = 1;
+#define DISC_VERSION_SINGLE 0
+#define DISC_VERSION_DUAL 1
 
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
@@ -331,60 +331,30 @@ static int _WOD_dirclose_r(struct _reent *r, DIR_ITER *dirState) {
     return 0;
 }
 
-static int _WOD_statvfs_r(struct _reent *r, const char *path, struct statvfs *buf) {
-    r->_errno = ENOTSUP;
-    return -1;
-}
-
-static int _WOD_write_r(struct _reent *r, int fd, const char *ptr, int len) {
-    r->_errno = EBADF;
-    return -1;
-}
-
-static int _WOD_link_r(struct _reent *r, const char *existing, const char *newLink) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _WOD_unlink_r(struct _reent *r, const char *path) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _WOD_rename_r(struct _reent *r, const char *oldName, const char *newName) {
-    r->_errno = EROFS;
-    return -1;
-}
-
-static int _WOD_mkdir_r(struct _reent *r, const char *path, int mode) {
-    r->_errno = EROFS;
-    return -1;
-}
-
 static const devoptab_t dotab_wod = {
     "wod",
     sizeof(FILE_STRUCT),
     _WOD_open_r,
     _WOD_close_r,
-    _WOD_write_r,
+    NULL,
     _WOD_read_r,
     _WOD_seek_r,
     _WOD_fstat_r,
     _WOD_stat_r,
-    _WOD_link_r,
-    _WOD_unlink_r,
+    NULL,
+    NULL,
     _WOD_chdir_r,
-    _WOD_rename_r,
-    _WOD_mkdir_r,
+    NULL,
+    NULL,
     sizeof(DIR_STATE_STRUCT),
     _WOD_diropen_r,
     _WOD_dirreset_r,
     _WOD_dirnext_r,
     _WOD_dirclose_r,
-    _WOD_statvfs_r
+    NULL
 };
 
-struct disc_header {
+typedef struct {
     u8 disc_id;
     u8 game_code[2];
     u8 region_code;
@@ -399,18 +369,18 @@ struct disc_header {
     u8 title[64];
     u8 disable_hashes;
     u8 disable_encryption;
-} __attribute__((packed));
+} __attribute__((packed)) DISC_HEADER;
 
-struct disc_info {
-    struct disc_header header;
+typedef struct {
+    DISC_HEADER header;
     u64 size;
     const char *disc_type;
     const char *region;
-};
+} DISC_INFO;
 
-static bool get_disc_info(struct disc_info *info) {
+static bool get_disc_info(DISC_INFO *info) {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
-    memcpy(&info->header, read_buffer, sizeof(struct disc_header));
+    memcpy(&info->header, read_buffer, sizeof(DISC_HEADER));
     info->size = DISC_SIZE_WII_SINGLE;
     info->disc_type = DISC_NAME_UNKNOWN;
     if (info->header.disc_version == DISC_VERSION_DUAL) {
@@ -440,9 +410,9 @@ static bool get_disc_info(struct disc_info *info) {
 }
 
 static bool read_disc_info() {
-    struct disc_info info;
+    DISC_INFO info;
     if (!get_disc_info(&info)) return false;
-    if (info.disc_type == DISC_NAME_UNKNOWN) {
+    if (!strcmp(info.disc_type, DISC_NAME_UNKNOWN)) {
         u32 i;
         for (i = 1; i < (FILE_COUNT - 1); i++) {
             entries[i].enabled = true;
