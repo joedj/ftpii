@@ -21,8 +21,11 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <di/di.h>
 #include <errno.h>
 #include <fat.h>
+#include <fst/fst.h>
+#include <iso/iso.h>
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <stdio.h>
@@ -32,18 +35,20 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
+#include <wod/wod.h>
 
 #include "common.h"
 
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
 
-const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb" };
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gc1", "/gc2", "/sd", "/usb", "/dvd", "/wod", "/fst" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
 
 static const u32 CACHE_PAGES = 8192;
 
-static volatile bool fatInitState = false;
+static bool fatInitState = false;
+static bool _dvd_mountWait = false;
 
 bool hbc_stub() {
     return !!*(u32*)0x80001800;
@@ -76,15 +81,49 @@ u32 check_gamecube(u32 mask) {
     return 0;
 }
 
-bool mounted(PARTITION_INTERFACE partition) {
-    char prefix[] = "fatX:/";
-    prefix[3] = partition + '0';
+void to_real_prefix(char *prefix, int virtual_device_index) {
+    if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
+        strcpy(prefix, "dvd:/");
+    } else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
+        strcpy(prefix, "wod:/");
+    } else if (!strcmp("/fst", VIRTUAL_PARTITION_ALIASES[virtual_device_index])) {
+        strcpy(prefix, "fst:/");
+    } else {
+        sprintf(prefix, "fat%i:/", virtual_device_index + 1);
+    }
+}
+
+bool mounted(int virtual_device_index) {
+    char prefix[7];
+    to_real_prefix(prefix, virtual_device_index);
     DIR_ITER *dir = diropen(prefix);
     if (dir) {
         dirclose(dir);
         return true;
     }
     return false;
+}
+
+bool dvd_mountWait() {
+    return _dvd_mountWait;
+}
+
+void set_dvd_mountWait(bool state) {
+    _dvd_mountWait = state;
+}
+
+static void dvd_unmount() {
+    printf("Unmounting images at /wod...");
+    printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
+    printf("Unmounting Wii disc filesystem at /fst...");
+    printf(FST_Unmount() ? "succeeded.\n" : "failed.\n");
+    printf("Unmounting ISO9660 filesystem at /dvd...");
+    printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
+}
+
+s32 dvd_eject() {
+    dvd_unmount();
+    return DI_Eject();
 }
 
 static void fat_enable_readahead(PARTITION_INTERFACE partition) {
@@ -94,8 +133,8 @@ static void fat_enable_readahead(PARTITION_INTERFACE partition) {
 
 static void fat_enable_readahead_all() {
     PARTITION_INTERFACE i;
-    for (i = 1; i <= MAX_VIRTUAL_PARTITION_ALIASES; i++) {
-        if (mounted(i)) fat_enable_readahead(i);
+    for (i = 1; i < MAX_VIRTUAL_PARTITION_ALIASES - 2; i++) {
+        if (mounted(i - 1)) fat_enable_readahead(i);
     }
 }
 
@@ -132,6 +171,7 @@ static void set_power_flag() {
 void initialise_reset_buttons() {
     SYS_SetResetCallback(set_reset_flag);
     SYS_SetPowerCallback(set_power_flag);
+    WPAD_SetPowerButtonCallback(set_power_flag);
 }
 
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
@@ -149,26 +189,28 @@ void process_remount_event() {
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
         printf("                  |\n");
-        printf("             SD Gecko B (Down)\n");
+        printf("             DVD (Down)\n");
     } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
         mount_timer = 0;
         mountstate = MOUNTSTATE_START;
-        bool success = false;
-        if (!fatInitState) {
-            if (!initialise_fat()) {
-                printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
-                return;
-            }
-            if (mounted(mount_partition)) success = true;
-        } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
-            success = true;
-            fat_enable_readahead(mount_partition);
-        }
-
-        if (success) {
-            printf("Success: %s is mounted.\n", mount_deviceName);
+        if (mount_partition == PI_CUSTOM) {
+            set_dvd_mountWait(true);
+            DI_Mount();
+            printf("Mounting DVD...\n");
         } else {
-            printf("Error mounting %s.\n", mount_deviceName);
+            bool success = false;
+            if (!fatInitState) {
+                if (!initialise_fat()) {
+                    printf("Unable to initialise FAT subsystem, unable to mount %s\n", mount_deviceName);
+                    return;
+                }
+                if (mounted(mount_partition - 1)) success = true;
+            } else if (fatMountNormalInterface(mount_partition, CACHE_PAGES)) {
+                success = true;
+                fat_enable_readahead(mount_partition);
+            }
+            if (success) printf("Success: %s is mounted.\n", mount_deviceName);
+            else printf("Error mounting %s.\n", mount_deviceName);
         }
     }
 }
@@ -186,18 +228,21 @@ void process_device_select_event(u32 pressed) {
             mount_partition = PI_SDGECKO_A;
             mount_deviceName = "SD Gecko in slot A";
         } else if (pressed & WPAD_BUTTON_DOWN) {
-            mount_partition = PI_SDGECKO_B;
-            mount_deviceName = "SD Gecko in slot B";
+            mount_partition = PI_CUSTOM;
+            mount_deviceName = "DVD";
         }
         if (mount_deviceName) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
-            printf("Unmounting %s ...", mount_deviceName);
-            fflush(stdout);
-            if (!fatUnmount(mount_partition)) {
-                // TODO: try unsafe unmount stuff
-                printf("failure\n");
+            if (mount_partition == PI_CUSTOM) {
+                dvd_unmount();
             } else {
-                printf("done\n");
+                printf("Unmounting %s...", mount_deviceName);
+                if (!fatUnmount(mount_partition)) {
+                    // TODO: try unsafe unmount stuff
+                    printf("failed.\n");
+                } else {
+                    printf("succeeded.\n");
+                }
             }
             printf("To continue after changing the %s hold B on controller #1 or wait 30 seconds.\n", mount_deviceName);
             mount_timer = gettime() + secs_to_ticks(30);
@@ -217,12 +262,12 @@ void initialise_video() {
     VIDEO_Init();
     rmode = VIDEO_GetPreferredMode(NULL);
     xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
-    console_init(xfb, 20, 20, rmode->fbWidth, rmode->xfbHeight, rmode->fbWidth * VI_DISPLAY_PIX_SZ);
     VIDEO_Configure(rmode);
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
+    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
     VIDEO_SetNextFramebuffer(xfb);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
-    printf("\x1b[2;0H");
 }
 
 static bool check_reset_synchronous() {
@@ -319,14 +364,14 @@ s32 send_from_file(s32 s, FILE *f) {
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
         if (result < 0) {
-            printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
+            // printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
             goto end;
         }
     }
     if (bytes_read < FREAD_BUFFER_SIZE) {
         result = -!feof(f);
         if (result < 0) {
-            printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            // printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
         }
         goto end;
     }
@@ -342,7 +387,7 @@ s32 recv_to_file(s32 s, FILE *f) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read != -EAGAIN) {
-                printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+                // printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
             }
             return bytes_read;
         } else if (bytes_read == 0) {
@@ -351,7 +396,7 @@ s32 recv_to_file(s32 s, FILE *f) {
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
-            printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+            // printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
             return -1;
         }
     }
@@ -429,4 +474,9 @@ char *basename(char *path) {
         }
     }
     return path;
+}
+
+u64 stat_size(struct stat *st) {
+    if (st->st_dev == WOD_DEVICE) return st->st_blksize * (u64)st->st_blocks;
+    return st->st_size;
 }

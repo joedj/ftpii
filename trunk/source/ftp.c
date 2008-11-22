@@ -238,7 +238,7 @@ static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
     if (!vrt_stat(client->cwd, path, &st)) {
         char size_buf[12];
-        sprintf(size_buf, "%li", st.st_size); // XXX: what does this do for files over 2GB?
+        sprintf(size_buf, "%llu", stat_size(&st));
         return write_reply(client, 213, size_buf);
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -366,7 +366,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %11li Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename); // what does it do > 2GB?
+        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', stat_size(&st), filename);
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
@@ -500,6 +500,11 @@ static s32 ftp_SITE_NOPASSWD(client_t *client, char *rest) {
     return write_reply(client, 200, "Authentication disabled.");
 }
 
+static s32 ftp_SITE_EJECT(client_t *client, char *rest) {
+    if (dvd_eject()) return write_reply(client, 550, "Unable to eject DVD.");
+    return write_reply(client, 200, "DVD ejected.");
+}
+
 static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 501, "Unknown SITE command.");
 }
@@ -517,8 +522,8 @@ static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **co
     return handlers[i](client, rest);
 }
 
-static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", NULL };
-static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_UNKNOWN };
+static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", NULL };
+static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_UNKNOWN };
 
 static s32 ftp_SITE(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);

@@ -38,16 +38,20 @@ static const u32 VRT_DEVICE_ID = 38744;
     Converts a real absolute path to a client-visible path
     E.g. "fat3:/foo" -> "/sd/foo"
     The resulting path will fit into an array of size MAXPATHLEN
-    For this reason, a virtual prefix (e.g. "/sd" or "/usb" cannot be longer than "fatX:", i.e. 5 characters)
+    For this reason, a virtual prefix (i.e. /usb, /dvd) cannot be longer than its real counterpart (i.e. 5 characters for fatX:, 4 for dvd:)
     This function will not fail.  If it cannot complete successfully, the program will terminate with an error message.
 */
 char *to_virtual_path(char *real_path) {
     const char *alias = NULL;
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
-        if (!strncasecmp("fat", real_path, 3) && real_path[3] == ('1' + i) && real_path[4] == ':') {
+        char prefix[7];
+        to_real_prefix(prefix, i);
+        prefix[strlen(prefix) - 1] = '\x00'; // remove trailing slash
+        if (!strncasecmp(prefix, real_path, strlen(prefix))) {
             alias = VIRTUAL_PARTITION_ALIASES[i];
-            real_path += 5;
+            real_path += strlen(prefix);
+            break;
         }
     }
     if (!alias) {
@@ -159,7 +163,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
         const char *alias = VIRTUAL_PARTITION_ALIASES[i];
         size_t alias_len = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
-            sprintf(prefix, "fat%i:/", i + 1);
+            to_real_prefix(prefix, i);
             rest += alias_len;
             if (*rest == '/') rest++;
             break;
@@ -219,11 +223,14 @@ FILE *vrt_fopen(char *cwd, char *path, char *mode) {
 }
 
 int vrt_stat(char *cwd, char *path, struct stat *st) {
-    if (!strcmp("/", cwd)) {
+    char *real_path = to_real_path(cwd, path);
+    if (!real_path) return -1;
+    else if (!*real_path) {
         st->st_mode = S_IFDIR;
         st->st_size = 31337;
         return 0;
     }
+    free(real_path);
     return (int)with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
@@ -292,7 +299,7 @@ DIR_ITER *vrt_diropen(char *cwd, char *path) {
 int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st) {
     if (iter->device == VRT_DEVICE_ID) {
         for (; (int)iter->dirStruct < MAX_VIRTUAL_PARTITION_ALIASES; iter->dirStruct++) {
-            if (mounted((int)iter->dirStruct + 1)) {
+            if (mounted((int)iter->dirStruct)) {
                 st->st_mode = S_IFDIR;
                 st->st_size = 0;
                 strcpy(filename, VIRTUAL_PARTITION_ALIASES[(int)iter->dirStruct] + 1);

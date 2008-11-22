@@ -23,9 +23,13 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <di/di.h>
+#include <fst/fst.h>
+#include <iso/iso.h>
 #include <string.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
+#include <wod/wod.h>
 
 #include "common.h"
 #include "ftp.h"
@@ -34,6 +38,7 @@ static const u16 PORT = 21;
 static const char *APP_DIR_PREFIX = "ftpii_";
 
 static void initialise_ftpii() {
+    DI_Init();
     initialise_video();
     PAD_Init();
     WPAD_Init();
@@ -72,6 +77,18 @@ static void process_gamecube_events() {
     }
 }
 
+static void process_dvd_events() {
+    if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
+        set_dvd_mountWait(false);
+        printf("Mounting images at /wod...");
+        printf(WOD_Mount() ? "succeeded.\n" : "failed.\n");
+        printf("Mounting Wii disc filesystem at /fst...");
+        printf(FST_Mount() ? "succeeded.\n" : "failed.\n");
+        printf("Mounting ISO9660 filesystem at /dvd...");
+        printf(ISO9660_Mount() ? "succeeded.\n" : "failed.\n");
+    }
+}
+
 int main(int argc, char **argv) {
     initialise_ftpii();
 
@@ -84,6 +101,7 @@ int main(int argc, char **argv) {
     s32 server = create_server(PORT);
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
+        process_dvd_events();
         process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
@@ -93,6 +111,9 @@ int main(int argc, char **argv) {
     cleanup_ftp();
     net_close(server);
     // TODO: unmount stuff
+
+    if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
+    DI_Close();
 
     printf("\nKTHXBYE\n");
     if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
