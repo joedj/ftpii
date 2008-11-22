@@ -204,14 +204,7 @@ static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset) {
 }
 
 static u64 plaintext_to_cipher(u64 offset) {
-    u32 clusters = offset / PLAINTEXT_CLUSTER_SIZE;
-    u32 remainder = offset % PLAINTEXT_CLUSTER_SIZE;
-    u64 cipher_offset = (u64)clusters * ENCRYPTED_CLUSTER_SIZE;
-    if (remainder || !clusters) {
-        cipher_offset += CLUSTER_HEADER_SIZE;
-        cipher_offset += remainder;
-    }
-    return cipher_offset;
+    return offset / PLAINTEXT_CLUSTER_SIZE * ENCRYPTED_CLUSTER_SIZE + (offset % PLAINTEXT_CLUSTER_SIZE) + CLUSTER_HEADER_SIZE;
 }
 
 static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
