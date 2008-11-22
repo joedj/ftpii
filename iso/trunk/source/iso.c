@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <di/di.h>
 #include <errno.h>
+#include <ogc/lwp_watchdog.h>
 #include <ogcsys.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +68,7 @@ static u32 cache_sectors = 0;
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
 static bool unicode = false;
+static u64 last_access = 0;
 
 static bool is_dir(DIR_ENTRY *entry) {
     return entry->flags & FLAG_DIR;
@@ -178,10 +180,12 @@ static int _ISO9660_read_r(struct _reent *r, int fd, char *ptr, int len) {
         return len;
     }
     if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
+        last_access = gettime();
         cache_sectors = 0;
         r->_errno = EIO;
         return -1;
     }
+    last_access = gettime();
     cache_start = sector;
     cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
     memcpy(ptr, read_buffer + sector_offset, len);
@@ -481,7 +485,8 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
 bool ISO9660_Mount() {
     ISO9660_Unmount();
     bool success = read_directories() && AddDevice(&dotab_iso9660) >= 0;
-    if (!success) ISO9660_Unmount();
+    if (success) last_access = gettime();
+    else ISO9660_Unmount();
     return success;
 }
 
@@ -494,5 +499,10 @@ bool ISO9660_Unmount() {
     current = root;
     unicode = false;
     cache_sectors = 0;
+    last_access = 0;
     return !RemoveDevice("dvd:/");
+}
+
+u64 ISO9660_LastAccess() {
+    return last_access;
 }

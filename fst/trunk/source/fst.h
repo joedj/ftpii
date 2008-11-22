@@ -30,5 +30,6 @@ misrepresented as being the original software.
 
 bool FST_Mount();
 bool FST_Unmount();
+u64 FST_LastAccess();
 
 #endif /* _FST_H_ */

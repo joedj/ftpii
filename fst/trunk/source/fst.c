@@ -26,6 +26,7 @@ misrepresented as being the original software.
 #include <di/di.h>
 #include <errno.h>
 #include <ogc/es.h>
+#include <ogc/lwp_watchdog.h>
 #include <ogcsys.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -87,6 +88,7 @@ static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
 static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
 static PARTITION *partitions = NULL;
+static u64 last_access = 0;
 
 static u8 aescache[PLAINTEXT_CLUSTER_SIZE] __attribute__((aligned(32)));
 static u64 aescache_start = 0;
@@ -177,7 +179,11 @@ static int _read(void *ptr, u64 offset, u32 len) {
     u32 sector = offset / SECTOR_SIZE;
     u32 sector_offset = offset % SECTOR_SIZE;
     len = MIN(BUFFER_SIZE - sector_offset, len);
-    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) return -1;
+    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
+        last_access = gettime();
+        return -1;
+    }
+    last_access = gettime();
     memcpy(ptr, read_buffer + sector_offset, len);
     return len;
 }
@@ -572,7 +578,8 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
 bool FST_Mount() {
     FST_Unmount();
     bool success = read_disc() && AddDevice(&dotab_fst) >= 0;
-    if (!success) FST_Unmount();
+    if (success) last_access = gettime();
+    else FST_Unmount();
     return success;
 }
 
@@ -588,5 +595,10 @@ bool FST_Unmount() {
     }
     current = root;
     aescache_end = 0;
+    last_access = 0;
     return !RemoveDevice("fst:/");
+}
+
+u64 FST_LastAccess() {
+    return last_access;
 }

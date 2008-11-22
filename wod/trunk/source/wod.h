@@ -31,5 +31,6 @@ misrepresented as being the original software.
 
 bool WOD_Mount();
 bool WOD_Unmount();
+u64 WOD_LastAccess();
 
 #endif /* _WOD_H_ */
