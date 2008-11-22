@@ -49,6 +49,7 @@ static const u32 CACHE_PAGES = 8192;
 
 static bool fatInitState = false;
 static bool _dvd_mountWait = false;
+static u64 dvd_last_stopped = 0;
 
 bool hbc_stub() {
     return !!*(u32*)0x80001800;
@@ -112,6 +113,15 @@ void set_dvd_mountWait(bool state) {
     _dvd_mountWait = state;
 }
 
+static u64 dvd_last_access() {
+    return MAX(MAX(ISO9660_LastAccess(), WOD_LastAccess()), FST_LastAccess());
+}
+
+s32 dvd_stop() {
+    dvd_last_stopped = gettime();
+    return DI_StopMotor();
+}
+
 static void dvd_unmount() {
     printf("Unmounting images at /wod...");
     printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
@@ -119,6 +129,7 @@ static void dvd_unmount() {
     printf(FST_Unmount() ? "succeeded.\n" : "failed.\n");
     printf("Unmounting ISO9660 filesystem at /dvd...");
     printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
+    dvd_stop();
 }
 
 s32 dvd_eject() {
@@ -250,9 +261,16 @@ void process_device_select_event(u32 pressed) {
     }
 }
 
+#define DVD_MOTOR_TIMEOUT 120
+
 void process_timer_events() {
     u64 now = gettime();
     if (mount_timer && now > mount_timer) process_remount_event();
+    u64 dvd_access = dvd_last_access();
+    if (!dvd_mountWait() && dvd_access && dvd_access > dvd_last_stopped && dvd_access < (now - secs_to_ticks(DVD_MOTOR_TIMEOUT))) {
+        printf("Stopping DVD drive motor after %u seconds of inactivity.\n", DVD_MOTOR_TIMEOUT);
+        dvd_unmount();
+    }
 }
 
 static void *xfb = NULL;
