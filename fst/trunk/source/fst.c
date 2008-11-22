@@ -180,7 +180,7 @@ static int _read(void *ptr, u64 offset, u32 len) {
 }
 
 static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
-    u32 end = offset_from_cluster + len;
+    u32 end = (offset_from_cluster + len + SECTOR_SIZE - 1) / SECTOR_SIZE * SECTOR_SIZE;
     u32 bytes_read = _read(buf, offset, end);
     if (bytes_read != end) return false;
     u8 *iv = buf + 0x3d0;
