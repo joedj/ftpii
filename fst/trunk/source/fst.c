@@ -180,16 +180,17 @@ static int _read(void *ptr, u64 offset, u32 len) {
 
 static u8 cluster_buffer[ENCRYPTED_CLUSTER_SIZE] __attribute__((aligned(32)));
 
-static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset) {
-    u32 bytes_read = _read(buf, offset, ENCRYPTED_CLUSTER_SIZE);
+static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 offset_from_cluster, u32 len) {
+    u32 end = offset_from_cluster + len;
+    u32 bytes_read = _read(buf, offset, end);
     if (bytes_read < 0) return false;
-    if (bytes_read != ENCRYPTED_CLUSTER_SIZE) return false;
+    if (bytes_read != end) return false;
     u8 *iv = buf + 0x3d0;
     u8 *inbuf = buf + CLUSTER_HEADER_SIZE;
-    u8 outbuf[PLAINTEXT_CLUSTER_SIZE];
+    u8 outbuf[end - CLUSTER_HEADER_SIZE];
     aes_set_key(title_key);
-    aes_decrypt(iv, inbuf, outbuf, PLAINTEXT_CLUSTER_SIZE);
-    memcpy(buf, outbuf, PLAINTEXT_CLUSTER_SIZE);
+    aes_decrypt(iv, inbuf, outbuf, end - CLUSTER_HEADER_SIZE);
+    memcpy(buf, outbuf + offset_from_cluster - CLUSTER_HEADER_SIZE, len);
     return true;
 }
 
@@ -216,15 +217,15 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
     }
 
     u64 offset_in_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
-    u32 offset_from_cluster_in_data = offset_in_data % ENCRYPTED_CLUSTER_SIZE;
-    len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster_in_data, len);
+    u32 offset_from_cluster = offset_in_data % ENCRYPTED_CLUSTER_SIZE;
+    len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster, len);
     u64 cluster_offset_in_data = (offset_in_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
     u64 data_offset = (partitions[file->entry->partition_idx].offset << 2LL) + 0x20000;
-    if (!read_and_decrypt_cluster(partitions[file->entry->partition_idx].key, cluster_buffer, data_offset + cluster_offset_in_data)) {
+    if (!read_and_decrypt_cluster(partitions[file->entry->partition_idx].key, cluster_buffer, data_offset + cluster_offset_in_data, offset_from_cluster, len)) {
         r->_errno = EIO;
         return -1;
     }
-    memcpy(ptr, cluster_buffer + offset_from_cluster_in_data - CLUSTER_HEADER_SIZE, len);
+    memcpy(ptr, cluster_buffer, len);
     file->offset += len;
     return len;
 }
