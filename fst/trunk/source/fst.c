@@ -58,6 +58,7 @@ typedef struct {
 
 typedef struct {
     u32 offset;
+    u32 data_offset;
     aeskey key;
     FST_INFO fst_info;
 } PARTITION;
@@ -248,8 +249,9 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
     u64 cluster_offset_from_data = (offset_from_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
     u32 offset_from_cluster = offset_from_data % ENCRYPTED_CLUSTER_SIZE;
     len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster, len);
-    u64 data_offset = (partitions[file->entry->partition].offset << 2LL) + 0x20000;
-    if (!read_and_decrypt_cluster(partitions[file->entry->partition].key, cluster_buffer, data_offset + cluster_offset_from_data, offset_from_cluster, len)) {
+    PARTITION *partition = partitions + file->entry->partition;
+    u64 data_offset = (partition->offset << 2LL) + (partition->data_offset << 2LL);
+    if (!read_and_decrypt_cluster(partition->key, cluster_buffer, data_offset + cluster_offset_from_data, offset_from_cluster, len)) {
         r->_errno = EIO;
         return -1;
     }
@@ -519,9 +521,9 @@ static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
 #define KOREAN_AES_KEY ((u8 *)"\x63\xb8\x2b\xb4\xf4\x61\x4e\x2e\x13\xf2\xfe\xfb\xba\x4c\x9b\x7e")
 #define KOREAN_KEY_FLAG 11
 
-static bool read_title_key(aeskey title_key, u32 partition_offset) {
+static bool read_title_key(PARTITION *partition) {
     tik ticket;
-    if (_read(&ticket, (partition_offset << 2) + 0x140, sizeof(tik)) != sizeof(tik)) return false;
+    if (_read(&ticket, (partition->offset << 2) + 0x140, sizeof(tik)) != sizeof(tik)) return false;
     u8 iv[16];
     bzero(iv, 16);
     memcpy(iv, &ticket.titleid, sizeof(ticket.titleid));
@@ -530,8 +532,12 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
     } else {
         aes_set_key(COMMON_AES_KEY);
     }
-    aes_decrypt(iv, ticket.cipher_title_key, title_key, 16);
+    aes_decrypt(iv, ticket.cipher_title_key, partition->key, 16);
     return true;
+}
+
+static bool read_data_offset(PARTITION *partition) {
+    return _read(&partition->data_offset, (partition->offset << 2) + 0x2b8, sizeof(partition->data_offset)) == sizeof(partition->data_offset);
 }
 
 static bool read_disc() {
@@ -568,7 +574,9 @@ static bool read_disc() {
                 partition_entry->flags = FLAG_DIR;
                 partition_entry->partition = partition_count;
                 partition->offset = entries[partition_index].offset;
-                if (!read_title_key(partition->key, partition->offset)) return false;
+
+                if (!read_title_key(partition)) return false;
+                if (!read_data_offset(partition)) return false;
 
                 if (DI_OpenPartition(partition->offset)) return false;
                 if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) {
