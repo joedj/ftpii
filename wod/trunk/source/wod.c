@@ -215,7 +215,7 @@ static int _WOD_seek_r(struct _reent *r, int fd, int pos, int dir) {
         return -1;
     }
 
-    int position;
+    s64 position;
 
     switch (dir) {
         case SEEK_SET:
@@ -232,7 +232,7 @@ static int _WOD_seek_r(struct _reent *r, int fd, int pos, int dir) {
             return -1;
     }
     
-    if ((pos > 0) && (position < 0)) {
+    if (pos > 0 && position < 0) {
         r->_errno = EOVERFLOW;
         return -1;
     }

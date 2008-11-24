@@ -52,7 +52,7 @@ static bool _dvd_mountWait = false;
 static u64 dvd_last_stopped = 0;
 
 bool hbc_stub() {
-    return !!*(u32*)0x80001800;
+    return !!*(u32 *)0x80001800;
 }
 
 void die(char *msg) {

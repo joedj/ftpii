@@ -282,7 +282,7 @@ static int _FST_seek_r(struct _reent *r, int fd, int pos, int dir) {
             return -1;
     }
     
-    if ((pos > 0) && (position < 0)) {
+    if (pos > 0 && position < 0) {
         r->_errno = EOVERFLOW;
         return -1;
     }
