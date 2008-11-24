@@ -57,7 +57,7 @@ struct client_struct {
     s32 data_socket;
     char cwd[MAXPATHLEN];
     char pending_rename[MAXPATHLEN];
-    long restart_marker;
+    s64 restart_marker;
     struct sockaddr_in address;
     bool authenticated;
     char buf[FTP_BUFFER_SIZE];
@@ -418,7 +418,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    if (client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
+    if (client->restart_marker && fseek_wod(f, client->restart_marker)) {
         s32 fseek_error = errno;
         fclose(f);
         client->restart_marker = 0;
@@ -458,13 +458,13 @@ static s32 ftp_APPE(client_t *client, char *path) {
 }
 
 static s32 ftp_REST(client_t *client, char *offset_str) {
-    long offset;
-    if (sscanf(offset_str, "%li", &offset) < 1 || offset < 0) {
+    s64 offset;
+    if (sscanf(offset_str, "%lli", &offset) < 1 || offset < 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
     client->restart_marker = offset;
     char msg[FTP_BUFFER_SIZE];
-    sprintf(msg, "Restart position accepted (%li).", offset);
+    sprintf(msg, "Restart position accepted (%lli).", offset);
     return write_reply(client, 350, msg);
 }
 

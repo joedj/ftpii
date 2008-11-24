@@ -114,11 +114,12 @@ int main(int argc, char **argv) {
     net_close(server);
     // TODO: unmount stuff
 
+    printf("\nKTHXBYE\n");
+
     if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     dvd_stop();
     DI_Close();
 
-    printf("\nKTHXBYE\n");
     if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     return 0;

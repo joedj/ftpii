@@ -498,3 +498,22 @@ u64 stat_size(struct stat *st) {
     if (st->st_dev == WOD_DEVICE) return st->st_blksize * (u64)st->st_blocks;
     return st->st_size;
 }
+
+int fseek_wod(FILE *f, s64 pos) {
+    struct stat st;
+    int fd = fileno(f);
+    if (fstat(fd, &st)) return -1;
+    if (st.st_dev != WOD_DEVICE) return fseek(f, pos, SEEK_SET);
+
+    int chunk = 0x7fffffff;
+    int chunks = pos / chunk;
+    int remainder = pos % chunk;
+    int result = lseek(fd, 0, SEEK_SET);
+    if (result < 0) return result;
+    for (; chunks > 0; chunks--) {
+        result = lseek(fd, chunk, SEEK_CUR);
+        if (result < 0) return result;
+    }
+    if (remainder) result = lseek(fd, remainder, SEEK_CUR);
+    return result < 0 ? result : 0;
+}

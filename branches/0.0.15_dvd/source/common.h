@@ -90,6 +90,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 char *dirname(char *path);
 char *basename(char *path);
 u64 stat_size(struct stat *st);
+int fseek_wod(FILE *f, s64 pos);
 
 extern u32 net_gethostip();
 
