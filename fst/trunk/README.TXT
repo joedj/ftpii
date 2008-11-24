@@ -11,8 +11,6 @@ make install # install libfst.a and fst/fst.h
 
 *** THANKS ***
 
-Thanks Nuke for providing the WUFE 
-
 Thanks to those in EFNet #wiidev for all the help, particularly Nuke for his
 WUFE code and dhewg for wiifuse, and to all those who help make libdi, DVDX,
 devkitPPC, libogc, libfat and The Homebrew Channel the great homebrew/development

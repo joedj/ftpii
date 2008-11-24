@@ -37,6 +37,8 @@ misrepresented as being the original software.
 #include "fst.h"
 #include "rijndael.h"
 
+#define DEVICE_NAME "fst"
+
 #define FLAG_DIR 1
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
@@ -89,6 +91,7 @@ static DIR_ENTRY *root = NULL;
 static DIR_ENTRY *current = NULL;
 static PARTITION *partitions = NULL;
 static u64 last_access = 0;
+static s32 dotab_device = -1;
 
 static u8 aescache[PLAINTEXT_CLUSTER_SIZE] __attribute__((aligned(32)));
 static u64 aescache_start = 0;
@@ -98,7 +101,15 @@ static bool is_dir(DIR_ENTRY *entry) {
     return entry->flags & FLAG_DIR;
 }
 
+static bool invalid_drive_specifier(const char *path) {
+    if (strchr(path, ':') == NULL) return false;
+	int namelen = strlen(DEVICE_NAME);
+    if (!strncmp(DEVICE_NAME, path, namelen) && path[namelen] == ':') return false;
+    return true;
+}
+
 static DIR_ENTRY *entry_from_path(const char *path) {
+    if (invalid_drive_specifier(path)) return NULL;
     if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
     DIR_ENTRY *entry;
     bool found = false;
@@ -391,7 +402,7 @@ static int _FST_dirclose_r(struct _reent *r, DIR_ITER *dirState) {
 }
 
 static const devoptab_t dotab_fst = {
-    "fst",
+    DEVICE_NAME,
     sizeof(FILE_STRUCT),
     _FST_open_r,
     _FST_close_r,
@@ -577,7 +588,7 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
 
 bool FST_Mount() {
     FST_Unmount();
-    bool success = read_disc() && AddDevice(&dotab_fst) >= 0;
+    bool success = read_disc() && (dotab_device = AddDevice(&dotab_fst)) >= 0;
     if (success) last_access = gettime();
     else FST_Unmount();
     return success;
@@ -596,7 +607,11 @@ bool FST_Unmount() {
     current = root;
     aescache_end = 0;
     last_access = 0;
-    return !RemoveDevice("fst:/");
+    if (dotab_device >= 0) {
+        dotab_device = -1;
+        return !RemoveDevice(DEVICE_NAME ":/");
+    }
+    return true;
 }
 
 u64 FST_LastAccess() {

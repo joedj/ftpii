@@ -35,6 +35,8 @@ misrepresented as being the original software.
 
 #include "wod.h"
 
+#define DEVICE_NAME "wod"
+
 #define DISC_SIZE_GAMECUBE 1459978240LL
 #define DISC_SIZE_WII_SINGLE 4699979776LL
 #define DISC_SIZE_WII_DUAL 8511160320LL
@@ -110,8 +112,17 @@ static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
 static u32 cache_start = 0;
 static u32 cache_sectors = 0;
 static u64 last_access = 0;
+static s32 dotab_device = -1;
+
+static bool invalid_drive_specifier(const char *path) {
+    if (strchr(path, ':') == NULL) return false;
+	int namelen = strlen(DEVICE_NAME);
+    if (!strncmp(DEVICE_NAME, path, namelen) && path[namelen] == ':') return false;
+    return true;
+}
 
 static DIR_ENTRY *entry_from_path(const char *path) {
+    if (invalid_drive_specifier(path)) return NULL;
     if (strchr(path, ':') != NULL) path = strchr(path, ':') + 1;
     const char *pathPosition = path;
     const char *pathEnd = strchr(path, '\0');
@@ -346,7 +357,7 @@ static int _WOD_dirclose_r(struct _reent *r, DIR_ITER *dirState) {
 }
 
 static const devoptab_t dotab_wod = {
-    "wod",
+    DEVICE_NAME,
     sizeof(FILE_STRUCT),
     _WOD_open_r,
     _WOD_close_r,
@@ -443,7 +454,7 @@ static bool read_disc_info() {
 
 bool WOD_Mount() {
     WOD_Unmount();
-    bool success = read_disc_info() && AddDevice(&dotab_wod) >= 0;
+    bool success = read_disc_info() && (dotab_device = AddDevice(&dotab_wod)) >= 0;
     if (success) last_access = gettime();
     else WOD_Unmount();
     return success;
@@ -458,7 +469,11 @@ bool WOD_Unmount() {
     }
     cache_sectors = 0;
     last_access = 0;
-    return !RemoveDevice("wod:/");
+    if (dotab_device >= 0) {
+        dotab_device = -1;
+        return !RemoveDevice(DEVICE_NAME ":/");
+    }
+    return true;
 }
 
 u64 WOD_LastAccess() {
