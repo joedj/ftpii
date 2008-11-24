@@ -189,12 +189,14 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
     u32 sector_offset = file->offset % SECTOR_SIZE;
     u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
     len = MIN(BUFFER_SIZE - sector_offset, len);
+
     if (cache_sectors && sector >= cache_start && (sector + sectors) <= (cache_start + cache_sectors)) {
         memcpy(ptr, read_buffer + (sector - cache_start) * SECTOR_SIZE + sector_offset, len);
         file->offset += len;
         return len;
     }
-    u32 remaining_sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, (file->entry->size - file->offset - len) / SECTOR_SIZE + 1);
+
+    u32 remaining_sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, (file->entry->size - 1) / SECTOR_SIZE - sector + 1);
     if (DI_ReadDVD(read_buffer, remaining_sectors, sector)) {
         last_access = gettime();
         cache_sectors = 0;
