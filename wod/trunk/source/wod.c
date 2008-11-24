@@ -194,7 +194,8 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
         file->offset += len;
         return len;
     }
-    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
+    u32 remaining_sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, (file->entry->size - file->offset - len) / SECTOR_SIZE + 1);
+    if (DI_ReadDVD(read_buffer, remaining_sectors, sector)) {
         last_access = gettime();
         cache_sectors = 0;
         r->_errno = EIO;
@@ -202,7 +203,7 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
     }
     last_access = gettime();
     cache_start = sector;
-    cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
+    cache_sectors = remaining_sectors;
     memcpy(ptr, read_buffer + sector_offset, len);
     file->offset += len;
     return len;
@@ -244,7 +245,7 @@ static int _WOD_seek_r(struct _reent *r, int fd, int pos, int dir) {
 
     file->offset = position;
 
-    return position;
+    return position % 0x7fffffff;
 }
 
 static void stat_entry(DIR_ENTRY *entry, struct stat *st) {
