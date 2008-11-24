@@ -117,6 +117,8 @@ static int _read(void *ptr, u64 offset, u32 len) {
         return -1;
     }
     last_access = gettime();
+    cache_start = sector;
+    cache_sectors = BUFFER_SIZE / SECTOR_SIZE;
     memcpy(ptr, read_buffer + sector_offset, len);
     return len;
 }
