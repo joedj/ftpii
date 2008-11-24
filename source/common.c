@@ -261,16 +261,16 @@ void process_device_select_event(u32 pressed) {
     }
 }
 
-#define DVD_MOTOR_TIMEOUT 120
+#define DVD_MOTOR_TIMEOUT 300
 
 void process_timer_events() {
     u64 now = gettime();
-    if (mount_timer && now > mount_timer) process_remount_event();
     u64 dvd_access = dvd_last_access();
-    if (!dvd_mountWait() && dvd_access && dvd_access > dvd_last_stopped && dvd_access < (now - secs_to_ticks(DVD_MOTOR_TIMEOUT))) {
+    if (dvd_access > dvd_last_stopped && now > (dvd_access + secs_to_ticks(DVD_MOTOR_TIMEOUT)) && !dvd_mountWait()) {
         printf("Stopping DVD drive motor after %u seconds of inactivity.\n", DVD_MOTOR_TIMEOUT);
         dvd_unmount();
     }
+    if (mount_timer && now > mount_timer) process_remount_event();
 }
 
 static void *xfb = NULL;
