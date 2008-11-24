@@ -511,7 +511,9 @@ static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
     return true;
 }
 
-#define COMMON_AES_KEY ((u8*)"\xeb\xe4\x2a\x22\x5e\x85\x93\xe4\x48\xd9\xc5\x45\x73\x81\xaa\xf7")
+#define COMMON_AES_KEY ((u8 *)"\xeb\xe4\x2a\x22\x5e\x85\x93\xe4\x48\xd9\xc5\x45\x73\x81\xaa\xf7")
+#define KOREAN_AES_KEY ((u8 *)"\x63\xb8\x2b\xb4\xf4\x61\x4e\x2e\x13\xf2\xfe\xfb\xba\x4c\x9b\x7e")
+#define KOREAN_KEY_FLAG 11
 
 static bool read_title_key(aeskey title_key, u32 partition_offset) {
     tik ticket;
@@ -519,7 +521,11 @@ static bool read_title_key(aeskey title_key, u32 partition_offset) {
     u8 iv[16];
     bzero(iv, 16);
     memcpy(iv, &ticket.titleid, sizeof(ticket.titleid));
-    aes_set_key(COMMON_AES_KEY);
+    if (ticket.reserved[KOREAN_KEY_FLAG]) {
+        aes_set_key(KOREAN_AES_KEY);
+    } else {
+        aes_set_key(COMMON_AES_KEY);
+    }
     aes_decrypt(iv, ticket.cipher_title_key, title_key, 16);
     return true;
 }
