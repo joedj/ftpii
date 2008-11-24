@@ -622,7 +622,16 @@ static bool read_directories() {
         PATH_ENTRY *child = add_child_entry(parent);
         if (!child) return false;
         memcpy(&child->table_entry, &entry, sizeof(PATHTABLE_ENTRY));
-        child->table_entry.name[child->table_entry.name_length] = '\x00';
+
+        if (unicode) {
+            u32 i;
+            for (i = 0; i < (child->table_entry.name_length / 2); i++) child->table_entry.name[i] = entry.name[i * 2 + 1];
+            child->table_entry.name[i] = '\x00';
+            child->table_entry.name_length = i;
+        } else {
+            child->table_entry.name[child->table_entry.name_length] = '\x00';
+        }
+
         child->index = ++i;
         offset += sizeof(PATHTABLE_ENTRY) - ISO_MAXPATHLEN + child->table_entry.name_length;
         if (child->table_entry.name_length % 2) offset++;
