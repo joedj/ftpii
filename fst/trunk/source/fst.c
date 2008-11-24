@@ -486,11 +486,15 @@ static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
     u32 no_fst_entries = fst->filelen;
     u32 name_table_offset = no_fst_entries * sizeof(FST_ENTRY);
     char *name_table = (char *)read_buffer + name_table_offset;
-    if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false; // TODO: make sure to read all of it...
+    if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false;
     DIR_ENTRY *current_dir = partition;
     u32 i;
     for (i = 1; i < no_fst_entries; i++) {
         fst++;
+        if ((u8 *)fst >= (read_buffer + BUFFER_SIZE)) {
+            if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset + (BUFFER_SIZE >> 2))) return false;
+            fst = (FST_ENTRY *)read_buffer;
+        }
         DIR_ENTRY *child;
         u32 name_offset = (fst->name_offset[0] << 16) | (fst->name_offset[1] << 8) | fst->name_offset[2];
         if (fst->filetype & FLAG_DIR) {
