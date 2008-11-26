@@ -46,7 +46,8 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20081122 0.0.16 Added support for wiimote power button.
+20081126 0.0.16 Added support for wiimote power button.
+                Added SITE MOUNT and SITE UNMOUNT commands.
                 Added SITE EJECT command to eject DVD.
                 Added ISO9660 DVD support (libiso).
                 Added Wii Optical Disc image support (libwod).

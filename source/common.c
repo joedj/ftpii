@@ -49,9 +49,10 @@ static const u32 CACHE_PAGES = 8192;
 
 static bool fatInitState = false;
 static bool _dvd_mountWait = false;
+static u64 dvd_last_stopped = 0;
 
 bool hbc_stub() {
-    return !!*(u32*)0x80001800;
+    return !!*(u32 *)0x80001800;
 }
 
 void die(char *msg) {
@@ -112,6 +113,15 @@ void set_dvd_mountWait(bool state) {
     _dvd_mountWait = state;
 }
 
+static u64 dvd_last_access() {
+    return MAX(MAX(ISO9660_LastAccess(), WOD_LastAccess()), FST_LastAccess());
+}
+
+s32 dvd_stop() {
+    dvd_last_stopped = gettime();
+    return DI_StopMotor();
+}
+
 static void dvd_unmount() {
     printf("Unmounting images at /wod...");
     printf(WOD_Unmount() ? "succeeded.\n" : "failed.\n");
@@ -119,6 +129,7 @@ static void dvd_unmount() {
     printf(FST_Unmount() ? "succeeded.\n" : "failed.\n");
     printf("Unmounting ISO9660 filesystem at /dvd...");
     printf(ISO9660_Unmount() ? "succeeded.\n" : "failed.\n");
+    dvd_stop();
 }
 
 s32 dvd_eject() {
@@ -146,6 +157,67 @@ bool initialise_fat() {
         fat_enable_readahead_all();
     }
     return fatInitState;
+}
+
+bool mount_virtual(char *dir) {
+    PARTITION_INTERFACE partition = 0;
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (!strcasecmp(VIRTUAL_PARTITION_ALIASES[i], dir)) {
+            if (!mounted(i)) partition = i + 1;
+            break;
+        }
+    }
+    if (!partition) return false;
+    
+    if (partition >= PI_CUSTOM) {
+        set_dvd_mountWait(true);
+        DI_Mount();
+        bool success = false;
+        u64 timeout = gettime() + secs_to_ticks(10);
+        while (!(DI_GetStatus() & DVD_READY) && gettime() < timeout) usleep(2000);
+        if (DI_GetStatus() & DVD_READY) {
+            set_dvd_mountWait(false);
+            if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[i])) success = ISO9660_Mount();
+            else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[i])) success = WOD_Mount();
+            else if (!strcmp("/fst", VIRTUAL_PARTITION_ALIASES[i])) success = FST_Mount();
+        }
+        if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
+        return success;
+    }
+
+    if (!fatInitState) {
+        if (!initialise_fat()) return false;
+        return mounted(i);
+    } else if (fatMountNormalInterface(partition, CACHE_PAGES)) {
+        fat_enable_readahead(partition);
+        return true;
+    }
+
+    return false;
+}
+
+bool unmount_virtual(char *dir) {
+    PARTITION_INTERFACE partition = 0;
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (!strcasecmp(VIRTUAL_PARTITION_ALIASES[i], dir)) {
+            if (mounted(i)) partition = i + 1;
+            break;
+        }
+    }
+    if (!partition) return false;
+    
+    if (partition >= PI_CUSTOM) {
+        bool success = false;
+        if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[i])) success = ISO9660_Unmount();
+        else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[i])) success = WOD_Unmount();
+        else if (!strcmp("/fst", VIRTUAL_PARTITION_ALIASES[i])) success = FST_Unmount();
+        if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
+        return success;
+    }
+
+    return fatUnmount(partition);
 }
 
 static volatile u8 _reset = 0;
@@ -250,8 +322,15 @@ void process_device_select_event(u32 pressed) {
     }
 }
 
+#define DVD_MOTOR_TIMEOUT 300
+
 void process_timer_events() {
     u64 now = gettime();
+    u64 dvd_access = dvd_last_access();
+    if (dvd_access > dvd_last_stopped && now > (dvd_access + secs_to_ticks(DVD_MOTOR_TIMEOUT)) && !dvd_mountWait()) {
+        printf("Stopping DVD drive motor after %u seconds of inactivity.\n", DVD_MOTOR_TIMEOUT);
+        dvd_unmount();
+    }
     if (mount_timer && now > mount_timer) process_remount_event();
 }
 
@@ -479,4 +558,23 @@ char *basename(char *path) {
 u64 stat_size(struct stat *st) {
     if (st->st_dev == WOD_DEVICE) return st->st_blksize * (u64)st->st_blocks;
     return st->st_size;
+}
+
+int fseek_wod(FILE *f, s64 pos) {
+    struct stat st;
+    int fd = fileno(f);
+    if (fstat(fd, &st)) return -1;
+    if (st.st_dev != WOD_DEVICE) return fseek(f, pos, SEEK_SET);
+
+    int chunk = 0x7fffffff;
+    int chunks = pos / chunk;
+    int remainder = pos % chunk;
+    int result = lseek(fd, 0, SEEK_SET);
+    if (result < 0) return result;
+    for (; chunks > 0; chunks--) {
+        result = lseek(fd, chunk, SEEK_CUR);
+        if (result < 0) return result;
+    }
+    if (remainder) result = lseek(fd, remainder, SEEK_CUR);
+    return result < 0 ? result : 0;
 }
