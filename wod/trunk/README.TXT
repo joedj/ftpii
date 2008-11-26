@@ -29,4 +29,4 @@ joedj @ EFNet #wiidev
 
 For subversion changes, see http://code.google.com/p/ftpii/source/list
 
-20081122 0.0.1  Public release.
+20081126 0.0.1  Public release.

@@ -29,6 +29,6 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.2, see http://code.google.com/p/ftpii/source/list
 
-20081122 0.0.2  Read directory tree at mount time.
+20081126 0.0.2  Read directory tree at mount time.
                 Lots of fixes and cleaning up.
 20080929 0.0.1  Public release.
