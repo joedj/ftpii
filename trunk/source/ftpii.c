@@ -80,12 +80,14 @@ static void process_gamecube_events() {
 static void process_dvd_events() {
     if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
         set_dvd_mountWait(false);
+        bool wod = false, fst = false, iso = false;
         printf("Mounting images at /wod...");
-        printf(WOD_Mount() ? "succeeded.\n" : "failed.\n");
+        printf((wod = WOD_Mount()) ? "succeeded.\n" : "failed.\n");
         printf("Mounting Wii disc filesystem at /fst...");
-        printf(FST_Mount() ? "succeeded.\n" : "failed.\n");
+        printf((fst = FST_Mount()) ? "succeeded.\n" : "failed.\n");
         printf("Mounting ISO9660 filesystem at /dvd...");
-        printf(ISO9660_Mount() ? "succeeded.\n" : "failed.\n");
+        printf((iso = ISO9660_Mount()) ? "succeeded.\n" : "failed.\n");
+        if (!(wod || fst || iso)) dvd_stop();
     }
 }
 
@@ -112,10 +114,12 @@ int main(int argc, char **argv) {
     net_close(server);
     // TODO: unmount stuff
 
+    printf("\nKTHXBYE\n");
+
     if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
+    dvd_stop();
     DI_Close();
 
-    printf("\nKTHXBYE\n");
     if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     return 0;

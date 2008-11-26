@@ -57,7 +57,7 @@ struct client_struct {
     s32 data_socket;
     char cwd[MAXPATHLEN];
     char pending_rename[MAXPATHLEN];
-    long restart_marker;
+    s64 restart_marker;
     struct sockaddr_in address;
     bool authenticated;
     char buf[FTP_BUFFER_SIZE];
@@ -418,7 +418,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    if (client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
+    if (client->restart_marker && fseek_wod(f, client->restart_marker)) {
         s32 fseek_error = errno;
         fclose(f);
         client->restart_marker = 0;
@@ -458,13 +458,13 @@ static s32 ftp_APPE(client_t *client, char *path) {
 }
 
 static s32 ftp_REST(client_t *client, char *offset_str) {
-    long offset;
-    if (sscanf(offset_str, "%li", &offset) < 1 || offset < 0) {
+    s64 offset;
+    if (sscanf(offset_str, "%lli", &offset) < 1 || offset < 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
     client->restart_marker = offset;
     char msg[FTP_BUFFER_SIZE];
-    sprintf(msg, "Restart position accepted (%li).", offset);
+    sprintf(msg, "Restart position accepted (%lli).", offset);
     return write_reply(client, 350, msg);
 }
 
@@ -505,6 +505,16 @@ static s32 ftp_SITE_EJECT(client_t *client, char *rest) {
     return write_reply(client, 200, "DVD ejected.");
 }
 
+static s32 ftp_SITE_MOUNT(client_t *client, char *path) {
+    if (!mount_virtual(path)) return write_reply(client, 550, "Unable to mount.");
+    return write_reply(client, 250, "Mounted.");
+}
+
+static s32 ftp_SITE_UNMOUNT(client_t *client, char *path) {
+    if (!unmount_virtual(path)) return write_reply(client, 550, "Unable to unmount.");
+    return write_reply(client, 250, "Unmounted.");
+}
+
 static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 501, "Unknown SITE command.");
 }
@@ -522,8 +532,8 @@ static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **co
     return handlers[i](client, rest);
 }
 
-static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", NULL };
-static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_UNKNOWN };
+static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", NULL };
+static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT, ftp_SITE_UNKNOWN };
 
 static s32 ftp_SITE(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);

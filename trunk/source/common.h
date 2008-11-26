@@ -55,11 +55,17 @@ void initialise_video();
 
 void to_real_prefix(char *prefix, int virtual_device_index);
 
+bool mount_virtual(char *dir);
+
+bool unmount_virtual(char *dir);
+
 bool mounted(int virtual_device_index);
 
 bool dvd_mountWait();
 
 void set_dvd_mountWait(bool state);
+
+s32 dvd_stop();
 
 s32 dvd_eject();
 
@@ -88,6 +94,7 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 char *dirname(char *path);
 char *basename(char *path);
 u64 stat_size(struct stat *st);
+int fseek_wod(FILE *f, s64 pos);
 
 extern u32 net_gethostip();
 
