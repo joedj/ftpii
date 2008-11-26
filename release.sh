@@ -1,9 +1,11 @@
 export FTPII_VERSION=$1
 
 cd `dirname $0`
+wd=`pwd`
+base=`basename $wd`
 cd ..
 
-cp -R ftpii $FTPII_VERSION && \
+cp -R $base $FTPII_VERSION && \
 cd $FTPII_VERSION && \
 make clean && \
 rm -f *.dol *.elf && \
@@ -12,7 +14,7 @@ rm -rf build patches && \
 mkdir ftpii && \
 mv hbc/meta.xml ftpii && \
 mv hbc/icon.png ftpii && \
-cp $FTPII_VERSION.dol ftpii/boot.dol && \
+cp ftpii.dol ftpii/boot.dol && \
 rm -f *.elf *.dol && \
 rm -rf hbc && \
 (find . -name .svn | xargs rm -rf) && \
