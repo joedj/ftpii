@@ -505,6 +505,16 @@ static s32 ftp_SITE_EJECT(client_t *client, char *rest) {
     return write_reply(client, 200, "DVD ejected.");
 }
 
+static s32 ftp_SITE_MOUNT(client_t *client, char *path) {
+    if (!mount_virtual(path)) return write_reply(client, 550, "Unable to mount.");
+    return write_reply(client, 250, "Mounted.");
+}
+
+static s32 ftp_SITE_UNMOUNT(client_t *client, char *path) {
+    if (!unmount_virtual(path)) return write_reply(client, 550, "Unable to unmount.");
+    return write_reply(client, 250, "Unmounted.");
+}
+
 static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 501, "Unknown SITE command.");
 }
@@ -522,8 +532,8 @@ static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **co
     return handlers[i](client, rest);
 }
 
-static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", NULL };
-static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_UNKNOWN };
+static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", NULL };
+static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT, ftp_SITE_UNKNOWN };
 
 static s32 ftp_SITE(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);
