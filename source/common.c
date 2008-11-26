@@ -159,6 +159,67 @@ bool initialise_fat() {
     return fatInitState;
 }
 
+bool mount_virtual(char *dir) {
+    PARTITION_INTERFACE partition = 0;
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (!strcasecmp(VIRTUAL_PARTITION_ALIASES[i], dir)) {
+            if (!mounted(i)) partition = i + 1;
+            break;
+        }
+    }
+    if (!partition) return false;
+    
+    if (partition >= PI_CUSTOM) {
+        set_dvd_mountWait(true);
+        DI_Mount();
+        bool success = false;
+        u64 timeout = gettime() + secs_to_ticks(10);
+        while (!(DI_GetStatus() & DVD_READY) && gettime() < timeout) usleep(2000);
+        if (DI_GetStatus() & DVD_READY) {
+            set_dvd_mountWait(false);
+            if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[i])) success = ISO9660_Mount();
+            else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[i])) success = WOD_Mount();
+            else if (!strcmp("/fst", VIRTUAL_PARTITION_ALIASES[i])) success = FST_Mount();
+        }
+        if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
+        return success;
+    }
+
+    if (!fatInitState) {
+        if (!initialise_fat()) return false;
+        return mounted(i);
+    } else if (fatMountNormalInterface(partition, CACHE_PAGES)) {
+        fat_enable_readahead(partition);
+        return true;
+    }
+
+    return false;
+}
+
+bool unmount_virtual(char *dir) {
+    PARTITION_INTERFACE partition = 0;
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
+        if (!strcasecmp(VIRTUAL_PARTITION_ALIASES[i], dir)) {
+            if (mounted(i)) partition = i + 1;
+            break;
+        }
+    }
+    if (!partition) return false;
+    
+    if (partition >= PI_CUSTOM) {
+        bool success = false;
+        if (!strcmp("/dvd", VIRTUAL_PARTITION_ALIASES[i])) success = ISO9660_Unmount();
+        else if (!strcmp("/wod", VIRTUAL_PARTITION_ALIASES[i])) success = WOD_Unmount();
+        else if (!strcmp("/fst", VIRTUAL_PARTITION_ALIASES[i])) success = FST_Unmount();
+        if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
+        return success;
+    }
+
+    return fatUnmount(partition);
+}
+
 static volatile u8 _reset = 0;
 static volatile u8 _power = 0;
 

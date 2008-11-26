@@ -55,6 +55,10 @@ void initialise_video();
 
 void to_real_prefix(char *prefix, int virtual_device_index);
 
+bool mount_virtual(char *dir);
+
+bool unmount_virtual(char *dir);
+
 bool mounted(int virtual_device_index);
 
 bool dvd_mountWait();
