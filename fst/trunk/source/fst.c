@@ -483,38 +483,49 @@ static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
 }
 
 static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
-    if (DI_Read(read_buffer, sizeof(FST_ENTRY), fst_offset)) return false;
-    FST_ENTRY *fst = (FST_ENTRY *)read_buffer;
-    u32 no_fst_entries = fst->filelen;
-    u32 name_table_offset = no_fst_entries * sizeof(FST_ENTRY);
-    char *name_table = (char *)read_buffer + name_table_offset;
-    if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset)) return false;
+    bool result = false;
+
+    u32 fst_size = partitions[partition->partition].fst_info.fst_size << 2;
+    u8 *fst_buffer = malloc(fst_size);
+    if (!fst_buffer) goto end;
+    u32 offset = 0;
+    while (offset < fst_size) {
+        if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset + (offset >> 2))) goto end;
+        memcpy(fst_buffer + offset, read_buffer, MIN(BUFFER_SIZE, fst_size - offset));
+        offset += BUFFER_SIZE;
+    }
+
+    FST_ENTRY *fst = (FST_ENTRY *)fst_buffer;
+    u32 fst_entries = fst->filelen;
+    u32 name_table_offset = fst_entries * sizeof(FST_ENTRY);
+    char *name_table = (char *)fst_buffer + name_table_offset;
+
     DIR_ENTRY *current_dir = partition;
     u32 i;
-    for (i = 1; i < no_fst_entries; i++) {
+    for (i = 1; i < fst_entries; i++) {
         fst++;
-        if ((u8 *)fst >= (read_buffer + BUFFER_SIZE)) {
-            if (DI_Read(read_buffer, BUFFER_SIZE, fst_offset + (BUFFER_SIZE >> 2))) return false;
-            fst = (FST_ENTRY *)read_buffer;
-        }
         DIR_ENTRY *child;
         u32 name_offset = (fst->name_offset[0] << 16) | (fst->name_offset[1] << 8) | fst->name_offset[2];
         if (fst->filetype & FLAG_DIR) {
             DIR_ENTRY *parent = entry_from_index(partition, fst->fileoffset);
-            if (!parent) return false;
+            if (!parent) goto end;
             current_dir = child = add_child_entry(parent);
-            if (!child) return false;
+            if (!child) goto end;
             child->offset = i;
         } else {
             child = add_child_entry(current_dir);
-            if (!child) return false;
+            if (!child) goto end;
             child->offset = fst->fileoffset;
             child->size = fst->filelen;
         }
         child->flags = fst->filetype;
         strcpy(child->name, name_table + name_offset);
     }
-    return true;
+
+    result = true;
+    end:
+    if (fst_buffer) free(fst_buffer);
+    return result;
 }
 
 #define COMMON_AES_KEY ((u8 *)"\xeb\xe4\x2a\x22\x5e\x85\x93\xe4\x48\xd9\xc5\x45\x73\x81\xaa\xf7")
