@@ -1,0 +1,19 @@
+#summary Optical media compatibility with ftpii
+
+= Introduction =
+
+This chart identifies the compatibility of ftpii with various optical media types, given a particular DVDx installation method.
+
+ftpii uses the DI_ReadDVD function provided by libdi.
+
+= Details =
+
+|| *Disc type* || *Normal + no chip* || *Normal + incompatible chip* || *PatchMii + no chip* || *PatchMii + incompatible chip* ||
+|| *DVD-ROM* || Yes || No || No || Yes ||
+|| *Wii/GC Original* || No || No || Yes || Yes ||
+
+
+= Summary =
+
+Use Normal when attempting to read DVD-ROM without a chip.
+Use PatchMii otherwise.
