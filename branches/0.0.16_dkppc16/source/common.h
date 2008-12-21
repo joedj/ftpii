@@ -30,7 +30,8 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <sys/dir.h>
 
-const char *VIRTUAL_PARTITION_ALIASES[7];
+typedef enum { PA_SD = 0, PA_USB, PA_DVD, PA_WOD, PA_FST } VIRTUAL_PARTITION;
+const char *VIRTUAL_PARTITION_ALIASES[5];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 bool initialise_fat();
@@ -53,13 +54,13 @@ u32 check_gamecube(u32 mask);
 
 void initialise_video();
 
-void to_real_prefix(char *prefix, int virtual_device_index);
+void to_real_prefix(char *prefix, VIRTUAL_PARTITION partition);
 
 bool mount_virtual(char *dir);
 
 bool unmount_virtual(char *dir);
 
-bool mounted(int virtual_device_index);
+bool mounted(VIRTUAL_PARTITION partition);
 
 bool dvd_mountWait();
 
@@ -93,8 +94,6 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 
 char *dirname(char *path);
 char *basename(char *path);
-u64 stat_size(struct stat *st);
-int fseek_wod(FILE *f, s64 pos);
 
 extern u32 net_gethostip();
 

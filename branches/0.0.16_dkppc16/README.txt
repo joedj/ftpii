@@ -10,7 +10,7 @@ To specify a password via The Homebrew Channel, rename the apps/ftpii directory 
 To specify a password via wiiload, pass an argument e.g. wiiload boot.elf YourPassword.
 To specify a password remotely, use the SITE PASSWD and SITE NOPASSWD commands.
 
-A working DVDX installation is required for the DVD features.
+A working DVDx installation is required for the DVD features.
 
 
 *** THANKS ***
@@ -27,10 +27,8 @@ homebrew/development environment that it is.
  - multiple data connections for single client (?)
  - ABOR, STAT, HELP, FEAT
  - mem card slots, NAND, dvd
- - sd gecko (support is here but disabled in libfat)
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
- - use SO_REUSEADDR ?
  - nice UI ;-)
 
 

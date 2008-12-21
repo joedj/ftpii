@@ -34,44 +34,6 @@ misrepresented as being the original software.
 
 static const u32 VRT_DEVICE_ID = 38744;
 
-/*
-    Converts a real absolute path to a client-visible path
-    E.g. "fat3:/foo" -> "/sd/foo"
-    The resulting path will fit into an array of size MAXPATHLEN
-    For this reason, a virtual prefix (i.e. /usb, /dvd) cannot be longer than its real counterpart (i.e. 5 characters for fatX:, 4 for dvd:)
-    This function will not fail.  If it cannot complete successfully, the program will terminate with an error message.
-*/
-char *to_virtual_path(char *real_path) {
-    const char *alias = NULL;
-    u32 i;
-    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
-        char prefix[7];
-        to_real_prefix(prefix, i);
-        prefix[strlen(prefix) - 1] = '\x00'; // remove trailing slash
-        if (!strncasecmp(prefix, real_path, strlen(prefix))) {
-            alias = VIRTUAL_PARTITION_ALIASES[i];
-            real_path += strlen(prefix);
-            break;
-        }
-    }
-    if (!alias) {
-        die("FATAL: BUG: Unable to convert real path to client-visible path, exiting");
-    }
-    
-    size_t virtual_path_size = strlen(alias) + strlen(real_path) + 1;
-    if (virtual_path_size > MAXPATHLEN) {
-        die("FATAL: BUG: Client-visible representation of real path is longer than MAXPATHLEN, exiting");
-    }
-
-    char *path = malloc(virtual_path_size);
-    if (!path) {
-        die("FATAL: Unable to allocate memory for client-visible path, exiting");
-    }
-    strcpy(path, alias);
-    strcat(path, real_path);
-    return path;
-}
-
 static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     char *path;
     if (virtual_path[0] == '/') {
@@ -126,6 +88,11 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
         token++;
     }
 
+    u32 end = strlen(normalised_path);
+    while (end > 1 && normalised_path[end - 1] == '/') {
+        normalised_path[--end] = '\x00';
+    }
+
     end:
     if (path != virtual_path) free(path);
     return normalised_path;
@@ -133,9 +100,9 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
 
 /*
     Converts a client-visible path to a real absolute path
-    E.g. "/sd/foo"    -> "fat3:/foo"
-         "/sd"        -> "fat3:/"
-         "/sd/../usb" -> "fat4:/"
+    E.g. "/sd/foo"    -> "sd:/foo"
+         "/sd"        -> "sd:/"
+         "/sd/../usb" -> "usb:/"
     The resulting path will fit in an array of size MAXPATHLEN
     Returns NULL to indicate that the client-visible path is invalid
 */
@@ -157,7 +124,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
         goto end;
     }
 
-    char prefix[7] = { '\0' };
+    char prefix[6] = { '\0' };
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
         const char *alias = VIRTUAL_PARTITION_ALIASES[i];
@@ -234,30 +201,23 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
     return (int)with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
-static char *vrt_getcwd(char *buf, size_t size) {
-    char real_path[size];
-    if (!getcwd(real_path, size)) return NULL;
-    char *virtual_path = to_virtual_path(real_path);
-    if (strlen(virtual_path) >= size) {
-        free(virtual_path);
-        return NULL;
-    }
-    strcpy(buf, virtual_path);
-    return buf;
-}
-
-// This function is not thread-safe
 int vrt_chdir(char *cwd, char *path) {
-    char *real_path = to_real_path(cwd, path);
-    if (!real_path) return -1;
-    else if (!*real_path) {
-        strcpy(cwd, "/");
-        return 0;
+    struct stat st;
+    if (vrt_stat(cwd, path, &st)) {
+        return -1;
+    } else if (!(st.st_mode & S_IFDIR)) {
+        errno = ENOTDIR;
+        return -1;
     }
-    free(real_path);
-    int result = (int)with_virtual_path(cwd, chdir, path, -1, NULL);
-    if (!result) vrt_getcwd(cwd, MAXPATHLEN); // TODO: error checking
-    return result;
+    char *abspath = virtual_abspath(cwd, path);
+    if (!abspath) {
+        errno = ENOMEM;
+        return -1;
+    }
+    strcpy(cwd, abspath);
+    strcat(cwd, "/");
+    free(abspath);
+    return 0;
 }
 
 int vrt_unlink(char *cwd, char *path) {
