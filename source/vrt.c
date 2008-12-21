@@ -124,19 +124,19 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
         goto end;
     }
 
-    char prefix[6] = { '\0' };
-    u32 i;
+    const char *prefix = NULL;
+    VIRTUAL_PARTITION i;
     for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
         const char *alias = VIRTUAL_PARTITION_ALIASES[i];
         size_t alias_len = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
-            to_real_prefix(prefix, i);
+            prefix = to_real_prefix(i);
             rest += alias_len;
             if (*rest == '/') rest++;
             break;
         }
     }
-    if (!*prefix) {
+    if (!prefix) {
         errno = ENODEV;
         goto end;
     }
@@ -259,7 +259,7 @@ DIR_ITER *vrt_diropen(char *cwd, char *path) {
 int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st) {
     if (iter->device == VRT_DEVICE_ID) {
         for (; (int)iter->dirStruct < MAX_VIRTUAL_PARTITION_ALIASES; iter->dirStruct++) {
-            if (mounted((int)iter->dirStruct)) {
+            if (mounted((VIRTUAL_PARTITION)iter->dirStruct)) {
                 st->st_mode = S_IFDIR;
                 st->st_size = 0;
                 strcpy(filename, VIRTUAL_PARTITION_ALIASES[(int)iter->dirStruct] + 1);

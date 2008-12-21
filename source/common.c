@@ -44,7 +44,7 @@ misrepresented as being the original software.
 
 const char *VIRTUAL_PARTITION_ALIASES[] = { "/sd", "/usb", "/dvd", "/wod", "/fst" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
-static const char *REAL_PREFIXES[] = { "sd", "usb", "dvd", "wod", "fst" };
+static const char *REAL_PREFIXES[] = { "sd:/", "usb:/", "dvd:/", "wod:/", "fst:/" };
 extern const DISC_INTERFACE __io_usbstorage;
 extern const DISC_INTERFACE __io_wiisd;
 static const DISC_INTERFACE *DISC_INTERFACES[] = { &__io_wiisd, &__io_usbstorage };
@@ -86,9 +86,8 @@ u32 check_gamecube(u32 mask) {
     return 0;
 }
 
-void to_real_prefix(char *prefix, VIRTUAL_PARTITION partition) {
-    strcpy(prefix, REAL_PREFIXES[partition]);
-    strcat(prefix, ":/");
+const char *to_real_prefix(VIRTUAL_PARTITION partition) {
+    return REAL_PREFIXES[partition];
 }
 
 static bool is_fat(VIRTUAL_PARTITION partition) {
@@ -100,9 +99,7 @@ static bool is_dvd(VIRTUAL_PARTITION partition) {
 }
 
 bool mounted(VIRTUAL_PARTITION partition) {
-    char prefix[6];
-    to_real_prefix(prefix, partition);
-    DIR_ITER *dir = diropen(prefix);
+    DIR_ITER *dir = diropen(to_real_prefix(partition));
     if (dir) {
         dirclose(dir);
         return true;
@@ -142,11 +139,9 @@ s32 dvd_eject() {
     return DI_Eject();
 }
 
-static void fat_enable_readahead(VIRTUAL_PARTITION virtual_device_index) {
-    char prefix[6];
-    to_real_prefix(prefix, virtual_device_index);
-    if (!fatEnableReadAhead(prefix, 64, 128))
-        printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", VIRTUAL_PARTITION_ALIASES[virtual_device_index]);
+static void fat_enable_readahead(VIRTUAL_PARTITION partition) {
+    if (!fatEnableReadAhead(to_real_prefix(partition), 64, 128))
+        printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", VIRTUAL_PARTITION_ALIASES[partition]);
 }
 
 static void fat_enable_readahead_all() {
@@ -194,7 +189,7 @@ bool mount_virtual(char *dir) {
         if (!fatInitState) {
             if (!initialise_fat()) return false;
             return mounted(partition);
-        } else if (fatMount(REAL_PREFIXES[partition], DISC_INTERFACES[partition], 0, CACHE_PAGES)) {
+        } else if (fatMount(VIRTUAL_PARTITION_ALIASES[partition] + 1, DISC_INTERFACES[partition], 0, CACHE_PAGES)) {
             fat_enable_readahead(partition);
             return true;
         }
@@ -221,9 +216,7 @@ bool unmount_virtual(char *dir) {
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
         return success;
     } else if (is_fat(partition)) {
-        char prefix[6];
-        to_real_prefix(prefix, partition);
-        fatUnmount(prefix);
+        fatUnmount(to_real_prefix(partition));
         return true;
     }
 
@@ -285,7 +278,7 @@ void process_remount_event() {
                     return;
                 }
                 if (mounted(mount_partition)) success = true;
-            } else if (fatMount(REAL_PREFIXES[mount_partition], DISC_INTERFACES[mount_partition], 0, CACHE_PAGES)) {
+            } else if (fatMount(VIRTUAL_PARTITION_ALIASES[mount_partition] + 1, DISC_INTERFACES[mount_partition], 0, CACHE_PAGES)) {
                 success = true;
                 fat_enable_readahead(mount_partition);
             }
@@ -314,9 +307,7 @@ void process_device_select_event(u32 pressed) {
                 dvd_unmount();
             } else if (is_fat(mount_partition)) {
                 printf("Unmounting %s...", mount_deviceName);
-                char prefix[6];
-                to_real_prefix(prefix, mount_partition);
-                fatUnmount(prefix);
+                fatUnmount(to_real_prefix(mount_partition));
                 printf("succeeded.\n");
             }
             printf("To continue after changing the %s hold B on controller #1 or wait 30 seconds.\n", mount_deviceName);
