@@ -54,7 +54,7 @@ u32 check_gamecube(u32 mask);
 
 void initialise_video();
 
-void to_real_prefix(char *prefix, VIRTUAL_PARTITION partition);
+const char *to_real_prefix(VIRTUAL_PARTITION partition);
 
 bool mount_virtual(char *dir);
 
