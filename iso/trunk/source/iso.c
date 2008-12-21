@@ -101,7 +101,7 @@ static bool is_dir(DIR_ENTRY *entry) {
 #define OFFSET_NAMELEN 32
 #define OFFSET_NAME 33
 
-static int _read(void *ptr, u64 offset, u32 len) {
+static int _read(void *ptr, u64 offset, size_t len) {
     u32 sector = offset / SECTOR_SIZE;
     u32 end_sector = (offset + len - 1) / SECTOR_SIZE;
     u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
@@ -348,7 +348,7 @@ static int _ISO9660_close_r(struct _reent *r, int fd) {
     return 0;
 }
 
-static int _ISO9660_read_r(struct _reent *r, int fd, char *ptr, int len) {
+static int _ISO9660_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;
@@ -376,7 +376,7 @@ static int _ISO9660_read_r(struct _reent *r, int fd, char *ptr, int len) {
     return len;
 }
 
-static int _ISO9660_seek_r(struct _reent *r, int fd, int pos, int dir) {
+static off_t _ISO9660_seek_r(struct _reent *r, int fd, off_t pos, int dir) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;

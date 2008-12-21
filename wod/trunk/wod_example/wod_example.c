@@ -74,8 +74,7 @@ int main(int argc, char **argv) {
     char filename[WOD_MAXPATHLEN];
     struct stat st;
     while (dirnext(dir, filename, &st) == 0) {
-        u64 size = st.st_blksize * (u64)st.st_blocks;
-        printf("%10llu %s\n", size, filename);
+        printf("%10llu %s\n", st.st_size, filename);
         fileCount++;
     }
     printf("%u entries.\n", fileCount);

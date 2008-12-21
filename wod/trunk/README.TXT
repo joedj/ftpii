@@ -1,6 +1,6 @@
 libwod -- a disc image devoptab library for the Wii
 
-libdi is required for building, DVDX is required at runtime.
+libdi is required for building, DVDx is required at runtime.
 
 
 *** INSTALLATION ***
@@ -12,7 +12,7 @@ make install # install libwod.a and wod/wod.h
 *** THANKS ***
 
 Thanks to those in EFNet #wiidev for all the help, and to all those
-who help make libdi, DVDX, devkitPPC, libogc, libfat and The Homebrew Channel
+who help make libdi, DVDx, devkitPPC, libogc, libfat and The Homebrew Channel
 the great homebrew/development environment that it is:
   Erant, bushing, marcan, emu_kidid, chishm, shagkur, WinterMute and many others.
 
@@ -29,4 +29,5 @@ joedj @ EFNet #wiidev
 
 For subversion changes, see http://code.google.com/p/ftpii/source/list
 
+20081221 0.0.2  Updated to work with devkitPPC r16.
 20081126 0.0.1  Public release.

@@ -227,7 +227,7 @@ static bool read_and_decrypt_cluster(aeskey title_key, u8 *buf, u64 offset, u32 
     return true;
 }
 
-static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
+static int _FST_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;
@@ -260,7 +260,7 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, int len) {
     return len;
 }
 
-static int _FST_seek_r(struct _reent *r, int fd, int pos, int dir) {
+static off_t _FST_seek_r(struct _reent *r, int fd, off_t pos, int dir) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;

@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     struct stat st;
     while (dirnext(dir, filename, &st) == 0) {
         if (st.st_mode & S_IFDIR) strcat(filename, "/");
-        printf("%10li %s\n", st.st_size, filename);
+        printf("%10llu %s\n", st.st_size, filename);
         fileCount++;
     }
     printf("%u entries.\n", fileCount);

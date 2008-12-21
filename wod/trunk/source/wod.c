@@ -166,7 +166,7 @@ static int _WOD_close_r(struct _reent *r, int fd) {
     return 0;
 }
 
-static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
+static int _WOD_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;
@@ -211,7 +211,7 @@ static int _WOD_read_r(struct _reent *r, int fd, char *ptr, int len) {
     return len;
 }
 
-static int _WOD_seek_r(struct _reent *r, int fd, int pos, int dir) {
+static off_t _WOD_seek_r(struct _reent *r, int fd, off_t pos, int dir) {
     FILE_STRUCT *file = (FILE_STRUCT *)fd;
     if (!file->inUse) {
         r->_errno = EBADF;
@@ -247,7 +247,7 @@ static int _WOD_seek_r(struct _reent *r, int fd, int pos, int dir) {
 
     file->offset = position;
 
-    return position % 0x7fffffff;
+    return position;
 }
 
 static void stat_entry(DIR_ENTRY *entry, struct stat *st) {

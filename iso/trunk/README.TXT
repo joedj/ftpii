@@ -1,6 +1,6 @@
 libiso -- an ISO9660 DVD devoptab library for the Wii
 
-libdi is required for building, DVDX is required at runtime.
+libdi is required for building, DVDx is required at runtime.
 
 
 *** INSTALLATION ***
@@ -12,7 +12,7 @@ make install # install libiso.a and iso/iso.h
 *** THANKS ***
 
 Thanks to those in EFNet #wiidev for all the help, and to all those
-who help make mupen64gc, libdi, DVDX, devkitPPC, libogc, libfat and
+who help make mupen64gc, libdi, DVDx, devkitPPC, libogc, libfat and
 The Homebrew Channel the great homebrew/development environment that it is:
   Erant, bushing, marcan, emu_kidid, chishm, shagkur, WinterMute and many others.
 
@@ -29,6 +29,7 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.2, see http://code.google.com/p/ftpii/source/list
 
-20081126 0.0.2  Read directory tree at mount time.
+20081221 0.0.3  Updated to work with devkitPPC r16.
+20081126 0.0.2  Read path table at mount time.
                 Lots of fixes and cleaning up.
 20080929 0.0.1  Public release.
