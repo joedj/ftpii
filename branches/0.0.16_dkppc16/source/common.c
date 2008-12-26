@@ -443,9 +443,9 @@ s32 send_from_file(s32 s, FILE *f) {
     }
     if (bytes_read < FREAD_BUFFER_SIZE) {
         result = -!feof(f);
-        if (result < 0) {
-            // printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-        }
+        // if (result < 0) {
+        //     printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
+        // }
         goto end;
     }
     return -EAGAIN;
@@ -459,9 +459,9 @@ s32 recv_to_file(s32 s, FILE *f) {
     while (1) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
-            if (bytes_read != -EAGAIN) {
-                // printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
-            }
+            // if (bytes_read != -EAGAIN) {
+            //     printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
+            // }
             return bytes_read;
         } else if (bytes_read == 0) {
             return 0;
