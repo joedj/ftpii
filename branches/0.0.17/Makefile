@@ -28,7 +28,7 @@ INCLUDES	:=
 CFLAGS	= -g -O2 -mrvl -Wall $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
 
-LDFLAGS	=	-g $(MACHDEP) -mrvl -Wl,-Map,$(notdir $@).map,--section-start,.header=0x80a00000
+LDFLAGS	=	-g $(MACHDEP) -mrvl -Wl,-Map,$(notdir $@).map,--section-start,.init=0x80a00000
 
 #---------------------------------------------------------------------------------
 # any extra libraries we wish to link with the project
