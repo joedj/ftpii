@@ -328,17 +328,17 @@ void process_timer_events() {
     if (mount_timer && now > mount_timer) process_remount_event();
 }
 
-static void *xfb = NULL;
-static GXRModeObj *rmode = NULL;
-
 void initialise_video() {
     VIDEO_Init();
-    rmode = VIDEO_GetPreferredMode(NULL);
-    xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
+    GXRModeObj *rmode = VIDEO_GetPreferredMode(NULL);
     VIDEO_Configure(rmode);
-    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
-    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
+    void *xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
     VIDEO_SetNextFramebuffer(xfb);
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
+    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
 }
