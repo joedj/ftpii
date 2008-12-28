@@ -27,10 +27,10 @@ misrepresented as being the original software.
 
 #include "dol.h"
 
-extern u8 nested_dol[];
+extern u8 _ftpii_dol[];
 
 int main(int argc, char **argv) {
     VIDEO_Init();
-    run_dol(nested_dol);
+    run_dol(_ftpii_dol);
     return 1;
 }
