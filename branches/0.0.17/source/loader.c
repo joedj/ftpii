@@ -24,8 +24,10 @@ misrepresented as being the original software.
 
 */
 #include <gccore.h>
+#include <gctypes.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/dir.h>
 
 #include "dol.h"
@@ -39,13 +41,26 @@ static bool read_from_file(u8 *buf, FILE *f) {
     }
 }
 
-void load_from_file(FILE *f) {
+void load_from_file(FILE *f, char *arg) {
+    struct __argv argv;
+    bzero(&argv, sizeof(argv));
+    argv.argvMagic = ARGV_MAGIC;
+    argv.length = strlen(arg) + 2;
+    argv.commandLine = malloc(argv.length);
+    if (!argv.commandLine) return;
+    strcpy(argv.commandLine, arg);
+    argv.commandLine[argv.length - 1] = '\x00';
+    argv.argc = 1;
+    argv.argv = &argv.commandLine;
+    argv.endARGV = argv.argv + 1;
+
     struct stat st;
     int fd = fileno(f);
     if (fstat(fd, &st)) return;
-    u8 *buf = malloc(st.st_size);
-    if (!buf) return;
+    u8 *buf = (u8 *)0x92000000;
     if (!read_from_file(buf, f)) return;
-    run_dol(buf);
-    free(buf);
+
+    run_dol(buf, &argv);
+
+    free(argv.commandLine);
 }

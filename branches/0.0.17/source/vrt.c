@@ -156,7 +156,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
 
 typedef void * (*path_func)(char *path, ...);
 
-void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_path, s32 failed, ...) {
+static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_path, s32 failed, ...) {
     char *path = to_real_path(virtual_cwd, virtual_path);
     if (!path || !*path) return (void *)failed;
     

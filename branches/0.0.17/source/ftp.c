@@ -525,10 +525,12 @@ static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
 
 static s32 ftp_SITE_LOAD(client_t *client, char *path) {
     FILE *f = vrt_fopen(client->cwd, path, "rb");
-    if (!f) {
-        return write_reply(client, 550, strerror(errno));
-    }
-    load_from_file(f);
+    if (!f) return write_reply(client, 550, strerror(errno));
+    char *real_path = to_real_path(client->cwd, path);
+    if (!real_path) goto end;
+    load_from_file(f, real_path);
+    free(real_path);
+    end:
     fclose(f);
     return write_reply(client, 500, "Unable to load.");
 }
