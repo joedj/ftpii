@@ -44,6 +44,10 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20081228 0.0.17 Upgraded to devkitPPC r16.
+                Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
+                Fixed display initialisation bug causing intermittent blank display on startup.
+                Added SITE LOAD command to run DOL executables.
 20081126 0.0.16 Added support for wiimote power button.
                 Added SITE MOUNT and SITE UNMOUNT commands.
                 Added SITE EJECT command to eject DVD.
