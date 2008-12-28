@@ -9,26 +9,26 @@ include $(DEVKITPPC)/wii_rules
 DEPSDIR = .
 CFLAGS = -g -O2 -Wall $(MACHDEP) $(INCLUDE) -I$(LIBOGC_INC)
 
-NESTED_OBJS = ftpii.o common.o ftp.o loader.o vrt.o dol.o
-NESTED_DEPENDS = $(NESTED_OBJS:.o=.d)
+FTPII_OBJS = ftpii.o common.o ftp.o loader.o vrt.o dol.o
+FTPII_DEPENDS = $(FTPII_OBJS:.o=.d)
 
-FTPII_OBJS = nested.dol.o preloader.o dol.o
-FTPII_LDFLAGS = -L$(LIBOGC_LIB) -logc -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
-FTPII_DEPENDS := $(FTPII_OBJS:.o=.d)
+PRELOADER_OBJS = nested.dol.o preloader.o dol.o
+PRELOADER_LDFLAGS = -L$(LIBOGC_LIB) -logc -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
+PRELOADER_DEPENDS := $(PRELOADER_OBJS:.o=.d)
 
-LDFLAGS = -lfst -lwod -liso -ldi -lwiiuse -lbte -lfat -lm $(FTPII_LDFLAGS),--section-start,.init=0x81330000
+LDFLAGS = -lfst -lwod -liso -ldi -lwiiuse -lbte -lfat -lm $(PRELOADER_LDFLAGS),--section-start,.init=0x81330000
 
 export LD := $(CC)
 
 all: ftpii.dol
 
-ftpii.elf: $(FTPII_OBJS)
+ftpii.elf: $(PRELOADER_OBJS)
 	@echo linking ... $@
-	@$(LD) $^ $(FTPII_LDFLAGS) -o $@
+	@$(LD) $^ $(PRELOADER_LDFLAGS) -o $@
 
 nested.dol.o: nested.dol.s
 
-nested.elf: $(NESTED_OBJS)
+nested.elf: $(FTPII_OBJS)
 
 %.dol.s: %.dol
 	@bin2s $< > $@
@@ -36,5 +36,5 @@ nested.elf: $(NESTED_OBJS)
 clean:
 	@rm -f *.o *.d *.map *.s *.dol *.elf
 
--include $(NESTED_DEPENDS)
 -include $(FTPII_DEPENDS)
+-include $(PRELOADER_DEPENDS)
