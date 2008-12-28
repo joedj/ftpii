@@ -64,7 +64,7 @@ typedef struct {
 } PARTITION;
 
 typedef struct DIR_ENTRY_STRUCT {
-    char name[FST_MAXPATHLEN];
+    char *name;
     u32 partition;
     u32 offset; // offset in partition >> 2, or fst index for dirs
     u32 size;
@@ -519,7 +519,10 @@ static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
             child->size = fst->filelen;
         }
         child->flags = fst->filetype;
-        strcpy(child->name, name_table + name_offset);
+        char *name = name_table + name_offset;
+        if (strlen(name) >= FST_MAXPATHLEN) goto end;
+        child->name = strdup(name);
+        if (!child->name) goto end;
     }
 
     result = true;
@@ -581,6 +584,8 @@ static bool read_disc() {
                 PARTITION *partition = partitions + partition_count;
                 DIR_ENTRY *partition_entry = add_child_entry(root);
                 if (!partition_entry) return false;
+                partition_entry->name = malloc(3);
+                if (!partition_entry->name) return false;
                 sprintf(partition_entry->name, "%u", partition_count);
                 partition_entry->flags = FLAG_DIR;
                 partition_entry->partition = partition_count;
@@ -613,6 +618,7 @@ static void cleanup_recursive(DIR_ENTRY *entry) {
         if (is_dir(&entry->children[i]))
             cleanup_recursive(&entry->children[i]);
     if (entry->children) free(entry->children);
+    if (entry->name) free(entry->name);
 }
 
 bool FST_Mount() {
