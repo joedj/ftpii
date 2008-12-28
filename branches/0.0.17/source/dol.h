@@ -23,29 +23,9 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#include <gccore.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/dir.h>
+#ifndef _DOL_H_
+#define _DOL_H_
 
-#include "dol.h"
-#include "loader.h"
+void run_dol(void *dol);
 
-static bool read_from_file(u8 *buf, FILE *f) {
-    while (1) {
-        s32 bytes_read = fread(buf, 1, 0x8000, f);
-        if (bytes_read > 0) buf += bytes_read;
-        if (bytes_read < 0x8000) return feof(f);
-    }
-}
-
-void load_from_file(FILE *f) {
-    struct stat st;
-    int fd = fileno(f);
-    if (fstat(fd, &st)) return;
-    u8 *buf = malloc(st.st_size);
-    if (!buf) return;
-    if (!read_from_file(buf, f)) return;
-    run_dol(buf);
-    free(buf);
-}
+#endif /* _DOL_H */

@@ -6,17 +6,15 @@ base=`basename $wd`
 cd ..
 
 cp -R $base $FTPII_VERSION && \
-cd $FTPII_VERSION && \
+cd $FTPII_VERSION/source && \
 make clean && \
-rm -f *.dol *.elf && \
 make && \
-rm -rf build patches && \
+cd .. && \
 mkdir ftpii && \
 mv hbc/meta.xml ftpii && \
 mv hbc/icon.png ftpii && \
-cp ftpii.dol ftpii/boot.dol && \
-rm -f *.elf *.dol && \
-rm -rf hbc && \
+cp source/ftpii.dol ftpii/boot.dol && \
+rm -rf source hbc patches && \
 (find . -name .svn | xargs rm -rf) && \
 rm release.sh && \
 cd .. && \
