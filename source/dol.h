@@ -26,6 +26,8 @@ misrepresented as being the original software.
 #ifndef _DOL_H_
 #define _DOL_H_
 
-void run_dol(void *dol);
+#include <gctypes.h>
+
+void run_dol(void *dol, struct __argv *argv);
 
 #endif /* _DOL_H */

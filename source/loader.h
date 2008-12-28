@@ -28,6 +28,6 @@ misrepresented as being the original software.
 
 #include <stdio.h>
 
-void load_from_file(FILE *f);
+void load_from_file(FILE *f, char *arg);
 
 #endif /* _LOADER_H_ */

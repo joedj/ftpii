@@ -24,6 +24,7 @@ misrepresented as being the original software.
 
 */
 #include <gccore.h>
+#include <gctypes.h>
 #include <ogc/machine/processor.h>
 #include <string.h>
 
@@ -43,7 +44,7 @@ typedef struct {
     u32 entry_point;
 } dolheader;
 
-static u32 load_dol_image(void *dolstart) {
+static u32 load_dol_image(void *dolstart, struct __argv *argv) {
     dolheader *dolfile = (dolheader *)dolstart;
     u32 i;
     for (i = 0; i < 7; i++) {
@@ -58,12 +59,19 @@ static u32 load_dol_image(void *dolstart) {
     }
     memset((void *)dolfile->bss_start, 0, dolfile->bss_size);
     DCFlushRange((void *)dolfile->bss_start, dolfile->bss_size);
+
+    if (argv && argv->argvMagic == ARGV_MAGIC) {
+        void *new_argv = (void *)(dolfile->entry_point + 8);
+        memmove(new_argv, argv, sizeof(*argv));
+        DCFlushRangeNoSync(new_argv, sizeof(*argv));
+    }
+
     return dolfile->entry_point;
 }
 
-void run_dol(void *dol) {
+void run_dol(void *dol, struct __argv *argv) {
     u32 level;
-    void (*ep)() = (void(*)())load_dol_image(dol);
+    void (*ep)() = (void(*)())load_dol_image(dol, argv);
     __IOS_ShutdownSubsystems();
     _CPU_ISR_Disable(level);
     __exception_closeall();

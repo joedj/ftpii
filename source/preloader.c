@@ -31,6 +31,6 @@ extern u8 _ftpii_dol[];
 
 int main(int argc, char **argv) {
     VIDEO_Init();
-    run_dol(_ftpii_dol);
+    run_dol(_ftpii_dol, __system_argv);
     return 1;
 }
