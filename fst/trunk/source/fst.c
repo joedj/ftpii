@@ -460,26 +460,43 @@ typedef struct {
     u32 filelen;
 } __attribute__((packed)) FST_ENTRY;
 
-static DIR_ENTRY *entry_from_index(DIR_ENTRY *entry, u32 index) {
-    if (entry->offset == index) return entry;
-    u32 i;
-    for (i = 0; i < entry->fileCount; i++) {
-        if (is_dir(&entry->children[i])) {
-            DIR_ENTRY *match = entry_from_index(&entry->children[i], index);
-            if (match) return match;
-        }
-    }
-    return NULL;
-}
-
-static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
+static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir, char *name) {
     DIR_ENTRY *newChildren = realloc(dir->children, (dir->fileCount + 1) * sizeof(DIR_ENTRY));
     if (!newChildren) return NULL;
     bzero(newChildren + dir->fileCount, sizeof(DIR_ENTRY));
     dir->children = newChildren;
     DIR_ENTRY *child = &dir->children[dir->fileCount++];
     child->partition = dir->partition;
+    child->name = strdup(name);
+    if (!child->name) return NULL;
     return child;
+}
+
+static u32 read_fst(DIR_ENTRY *entry, FST_ENTRY *fst, char *name_table, s32 index) {
+    FST_ENTRY *fst_entry = fst + index;
+    
+    if (index > 0) {
+        u32 name_offset = *((u32 *)fst_entry) & 0x00ffffff;
+        char *name = name_table + name_offset;
+        if (strlen(name) >= FST_MAXPATHLEN) return -1;
+        entry = add_child_entry(entry, name);
+        if (!entry) return -1;
+        entry->flags = fst_entry->filetype;
+    }
+
+    if (fst_entry->filetype & FLAG_DIR) {
+        entry->offset = index;
+        s32 next;
+        for (next = index + 1; next < fst_entry->filelen;) {
+            next = read_fst(entry, fst, name_table, next);
+            if (next == -1) return -1;
+        }
+        return fst_entry->filelen;
+    } else {
+        entry->offset = fst_entry->fileoffset;
+        entry->size = fst_entry->filelen;
+        return index + 1;
+    }
 }
 
 static bool read_partition(DIR_ENTRY *partition) {
@@ -497,36 +514,11 @@ static bool read_partition(DIR_ENTRY *partition) {
     }
 
     FST_ENTRY *fst = (FST_ENTRY *)fst_buffer;
-    u32 fst_entries = fst->filelen;
-    u32 name_table_offset = fst_entries * sizeof(FST_ENTRY);
+    u32 name_table_offset = fst->filelen * sizeof(FST_ENTRY);
     char *name_table = (char *)fst_buffer + name_table_offset;
 
-    DIR_ENTRY *current_dir = partition;
-    u32 i;
-    for (i = 1; i < fst_entries; i++) {
-        fst++;
-        DIR_ENTRY *child;
-        u32 name_offset = (fst->name_offset[0] << 16) | (fst->name_offset[1] << 8) | fst->name_offset[2];
-        if (fst->filetype & FLAG_DIR) {
-            DIR_ENTRY *parent = entry_from_index(partition, fst->fileoffset);
-            if (!parent) goto end;
-            current_dir = child = add_child_entry(parent);
-            if (!child) goto end;
-            child->offset = i;
-        } else {
-            child = add_child_entry(current_dir);
-            if (!child) goto end;
-            child->offset = fst->fileoffset;
-            child->size = fst->filelen;
-        }
-        child->flags = fst->filetype;
-        char *name = name_table + name_offset;
-        if (strlen(name) >= FST_MAXPATHLEN) goto end;
-        child->name = strdup(name);
-        if (!child->name) goto end;
-    }
+    result = read_fst(partition, fst, name_table, 0) != -1;
 
-    result = true;
     end:
     if (fst_buffer) free(fst_buffer);
     return result;
@@ -565,10 +557,8 @@ static bool read_appldr_size(DIR_ENTRY *appldr) {
 }
 
 static bool add_appldr_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *appldr_entry = add_child_entry(partition);
+    DIR_ENTRY *appldr_entry = add_child_entry(partition, "appldr.bin");
     if (!appldr_entry) return false;
-    appldr_entry->name = strdup("appldr.bin");
-    if (!appldr_entry->name) return false;
     appldr_entry->offset = 0x2440 >> 2;
     return read_appldr_size(appldr_entry);
 }
@@ -592,19 +582,15 @@ static bool read_dol_size(DIR_ENTRY *dol) {
 }
 
 static bool add_dol_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *dol_entry = add_child_entry(partition);
+    DIR_ENTRY *dol_entry = add_child_entry(partition, "main.dol");
     if (!dol_entry) return false;
-    dol_entry->name = strdup("main.dol");
-    if (!dol_entry->name) return false;
     dol_entry->offset = partitions[partition->partition].fst_info.dol_offset;
     return read_dol_size(dol_entry);
 }
 
 static bool add_fst_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *fst_entry = add_child_entry(partition);
+    DIR_ENTRY *fst_entry = add_child_entry(partition, "fst.bin");
     if (!fst_entry) return false;
-    fst_entry->name = strdup("fst.bin");
-    if (!fst_entry->name) return false;
     fst_entry->offset = partitions[partition->partition].fst_info.fst_offset;
     fst_entry->size = partitions[partition->partition].fst_info.fst_size << 2LL;
     return true;
@@ -638,11 +624,10 @@ static bool read_disc() {
                 partitions = newPartitions;
                 bzero(partitions + partition_count, sizeof(PARTITION));
                 PARTITION *partition = partitions + partition_count;
-                DIR_ENTRY *partition_entry = add_child_entry(root);
+                char partition_name[3];
+                sprintf(partition_name, "%u", partition_count);
+                DIR_ENTRY *partition_entry = add_child_entry(root, partition_name);
                 if (!partition_entry) return false;
-                partition_entry->name = malloc(3);
-                if (!partition_entry->name) return false;
-                sprintf(partition_entry->name, "%u", partition_count);
                 partition_entry->flags = FLAG_DIR;
                 partition_entry->partition = partition_count;
                 partition->offset = entries[partition_index].offset;
