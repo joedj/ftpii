@@ -547,6 +547,13 @@ static bool read_data_offset(PARTITION *partition) {
     return _read(&partition->data_offset, (partition->offset << 2) + 0x2b8, sizeof(partition->data_offset)) == sizeof(partition->data_offset);
 }
 
+static bool add_header_entry(DIR_ENTRY *parent) {
+    DIR_ENTRY *entry = add_child_entry(parent, "header");
+    if (!entry) return false;
+    entry->size = 0x400;
+    return true;
+}
+
 static bool read_appldr_size(DIR_ENTRY *appldr) {
     if (DI_Read(read_buffer, 8, appldr->offset + (0x14 >> 2))) return false;
     u32 *ints = (u32 *)read_buffer;
@@ -556,11 +563,11 @@ static bool read_appldr_size(DIR_ENTRY *appldr) {
     return true;
 }
 
-static bool add_appldr_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *appldr_entry = add_child_entry(partition, "appldr.bin");
-    if (!appldr_entry) return false;
-    appldr_entry->offset = 0x2440 >> 2;
-    return read_appldr_size(appldr_entry);
+static bool add_appldr_entry(DIR_ENTRY *parent) {
+    DIR_ENTRY *entry = add_child_entry(parent, "appldr.bin");
+    if (!entry) return false;
+    entry->offset = 0x2440 >> 2;
+    return read_appldr_size(entry);
 }
 
 static bool read_dol_size(DIR_ENTRY *dol) {
@@ -581,39 +588,39 @@ static bool read_dol_size(DIR_ENTRY *dol) {
     return true;
 }
 
-static bool add_dol_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *dol_entry = add_child_entry(partition, "main.dol");
-    if (!dol_entry) return false;
-    dol_entry->offset = partitions[partition->partition].fst_info.dol_offset;
-    return read_dol_size(dol_entry);
+static bool add_dol_entry(DIR_ENTRY *parent) {
+    DIR_ENTRY *entry = add_child_entry(parent, "main.dol");
+    if (!entry) return false;
+    entry->offset = partitions[entry->partition].fst_info.dol_offset;
+    return read_dol_size(entry);
 }
 
-static bool add_fst_entry(DIR_ENTRY *partition) {
-    DIR_ENTRY *fst_entry = add_child_entry(partition, "fst.bin");
-    if (!fst_entry) return false;
-    fst_entry->offset = partitions[partition->partition].fst_info.fst_offset;
-    fst_entry->size = partitions[partition->partition].fst_info.fst_size << 2LL;
+static bool add_fst_entry(DIR_ENTRY *parent) {
+    DIR_ENTRY *entry = add_child_entry(parent, "fst.bin");
+    if (!entry) return false;
+    entry->offset = partitions[entry->partition].fst_info.fst_offset;
+    entry->size = partitions[entry->partition].fst_info.fst_size << 2LL;
     return true;
 }
 
-static DIR_ENTRY *add_partition_entry(u32 partition_number) {
-    char partition_name[3];
-    sprintf(partition_name, "%u", partition_number);
-    DIR_ENTRY *partition_entry = add_child_entry(root, partition_name);
-    if (!partition_entry) return NULL;
-    partition_entry->flags = FLAG_DIR;
-    partition_entry->partition = partition_number;
-    return partition_entry;
+static bool add_partition_entry(u32 partition_number) {
+    char name[3];
+    sprintf(name, "%u", partition_number);
+    DIR_ENTRY *entry = add_child_entry(root, name);
+    if (!entry) return false;
+    entry->flags = FLAG_DIR;
+    entry->partition = partition_number;
+    return true;
 }
 
 static DIR_ENTRY *add_metadata_entry(u32 partition_number) {
-    char meta_name[12];
-    sprintf(meta_name, "%u_metadata", partition_number);
-    DIR_ENTRY *meta_entry = add_child_entry(root, meta_name);
-    if (!meta_entry) return NULL;
-    meta_entry->flags = FLAG_DIR;
-    meta_entry->partition = partition_number;
-    return meta_entry;
+    char name[12];
+    sprintf(name, "%u_metadata", partition_number);
+    DIR_ENTRY *entry = add_child_entry(root, name);
+    if (!entry) return NULL;
+    entry->flags = FLAG_DIR;
+    entry->partition = partition_number;
+    return entry;
 }
 
 static bool read_disc() {
@@ -659,6 +666,7 @@ static bool read_disc() {
                 if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) goto error;
                 memcpy(&partition->fst_info, read_buffer, sizeof(FST_INFO));
 
+                if (!add_header_entry(meta_entry)) goto error;
                 if (!add_appldr_entry(meta_entry)) goto error;
                 if (partition->fst_info.dol_offset) {
                     if (!add_dol_entry(meta_entry)) goto error;
