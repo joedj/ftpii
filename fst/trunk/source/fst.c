@@ -482,10 +482,11 @@ static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir) {
     return child;
 }
 
-static bool read_partition(DIR_ENTRY *partition, u32 fst_offset) {
+static bool read_partition(DIR_ENTRY *partition) {
     bool result = false;
 
     u32 fst_size = partitions[partition->partition].fst_info.fst_size << 2;
+    u32 fst_offset = partitions[partition->partition].fst_info.fst_offset;
     u8 *fst_buffer = malloc(fst_size);
     if (!fst_buffer) goto end;
     u32 offset = 0;
@@ -554,6 +555,61 @@ static bool read_data_offset(PARTITION *partition) {
     return _read(&partition->data_offset, (partition->offset << 2) + 0x2b8, sizeof(partition->data_offset)) == sizeof(partition->data_offset);
 }
 
+static bool read_appldr_size(DIR_ENTRY *appldr) {
+    if (DI_Read(read_buffer, 8, appldr->offset + (0x14 >> 2))) return false;
+    u32 *ints = (u32 *)read_buffer;
+    u32 size = ints[0] + ints[1];
+    if (size) size += 32;
+    appldr->size = size;
+    return true;
+}
+
+static bool add_appldr_entry(DIR_ENTRY *partition) {
+    DIR_ENTRY *appldr_entry = add_child_entry(partition);
+    if (!appldr_entry) return false;
+    appldr_entry->name = strdup("appldr.bin");
+    if (!appldr_entry->name) return false;
+    appldr_entry->offset = 0x2440 >> 2;
+    return read_appldr_size(appldr_entry);
+}
+
+static bool read_dol_size(DIR_ENTRY *dol) {
+    if (DI_Read(read_buffer, 0x100, dol->offset)) return false;
+    u32 max = 0;
+    u32 i;
+    for (i = 0; i < 7; i++) {
+        u32 offset = *(u32 *)(read_buffer + (i * 4));
+        u32 size = *(u32 *)(read_buffer + (i * 4) + 0x90);
+        if ((offset + size) > max) max = offset + size;
+    }
+    for (i = 0; i < 11; i++) {
+        u32 offset = *(u32 *)(read_buffer + (i * 4) + 0x1c);
+        u32 size = *(u32 *)(read_buffer + (i * 4) + 0xac);
+        if ((offset + size) > max) max = offset + size;
+    }
+    dol->size = max;
+    return true;
+}
+
+static bool add_dol_entry(DIR_ENTRY *partition) {
+    DIR_ENTRY *dol_entry = add_child_entry(partition);
+    if (!dol_entry) return false;
+    dol_entry->name = strdup("main.dol");
+    if (!dol_entry->name) return false;
+    dol_entry->offset = partitions[partition->partition].fst_info.dol_offset;
+    return read_dol_size(dol_entry);
+}
+
+static bool add_fst_entry(DIR_ENTRY *partition) {
+    DIR_ENTRY *fst_entry = add_child_entry(partition);
+    if (!fst_entry) return false;
+    fst_entry->name = strdup("fst.bin");
+    if (!fst_entry->name) return false;
+    fst_entry->offset = partitions[partition->partition].fst_info.fst_offset;
+    fst_entry->size = partitions[partition->partition].fst_info.fst_size << 2LL;
+    return true;
+}
+
 static bool read_disc() {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
     DISC_HEADER *header = (DISC_HEADER *)read_buffer;
@@ -595,21 +651,27 @@ static bool read_disc() {
                 if (!read_data_offset(partition)) return false;
 
                 if (DI_OpenPartition(partition->offset)) return false;
-                if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) {
-                    DI_ClosePartition();
-                    return false;
-                }
+                if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) goto error;
                 memcpy(&partition->fst_info, read_buffer, sizeof(FST_INFO));
-                if (!read_partition(partition_entry, partition->fst_info.fst_offset)) {
-                    DI_ClosePartition();
-                    return false;
+
+                if (!add_appldr_entry(partition_entry)) goto error;
+                if (partition->fst_info.dol_offset) {
+                    if (!add_dol_entry(partition_entry)) goto error;
                 }
+                if (partition->fst_info.fst_offset && partition->fst_info.fst_size) {
+                    if (!add_fst_entry(partition_entry)) goto error;
+                    if (!read_partition(partition_entry)) goto error;
+                }
+
                 if (DI_ClosePartition()) return false;
                 partition_count++;
             }
         }
     }
     return true;
+    error:
+    DI_ClosePartition();
+    return false;
 }
 
 static void cleanup_recursive(DIR_ENTRY *entry) {
