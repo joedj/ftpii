@@ -33,6 +33,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 
 #include "common.h"
+#include "loader.h"
 #include "vrt.h"
 #include "ftp.h"
 
@@ -57,7 +58,7 @@ struct client_struct {
     s32 data_socket;
     char cwd[MAXPATHLEN];
     char pending_rename[MAXPATHLEN];
-    s64 restart_marker;
+    off_t restart_marker;
     struct sockaddr_in address;
     bool authenticated;
     char buf[FTP_BUFFER_SIZE];
@@ -238,7 +239,7 @@ static s32 ftp_SIZE(client_t *client, char *path) {
     struct stat st;
     if (!vrt_stat(client->cwd, path, &st)) {
         char size_buf[12];
-        sprintf(size_buf, "%llu", stat_size(&st));
+        sprintf(size_buf, "%llu", st.st_size);
         return write_reply(client, 213, size_buf);
     } else {
         return write_reply(client, 550, strerror(errno));
@@ -366,7 +367,7 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', stat_size(&st), filename);
+        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename);
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
@@ -418,11 +419,12 @@ static s32 ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(errno));
     }
 
-    if (client->restart_marker && fseek_wod(f, client->restart_marker)) {
-        s32 fseek_error = errno;
+    int fd = fileno(f);
+    if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
+        s32 lseek_error = errno;
         fclose(f);
         client->restart_marker = 0;
-        return write_reply(client, 550, strerror(fseek_error));
+        return write_reply(client, 550, strerror(lseek_error));
     }
     client->restart_marker = 0;
 
@@ -442,11 +444,13 @@ static s32 stor_or_append(client_t *client, FILE *f) {
 
 static s32 ftp_STOR(client_t *client, char *path) {
     FILE *f = vrt_fopen(client->cwd, path, "wb");
-    if (f && client->restart_marker && fseek(f, client->restart_marker, SEEK_SET)) {
-        s32 fseek_error = errno;
+    int fd;
+    if (f) fd = fileno(f);
+    if (f && client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
+        s32 lseek_error = errno;
         fclose(f);
         client->restart_marker = 0;
-        return write_reply(client, 550, strerror(fseek_error));
+        return write_reply(client, 550, strerror(lseek_error));
     }
     client->restart_marker = 0;
 
@@ -458,7 +462,7 @@ static s32 ftp_APPE(client_t *client, char *path) {
 }
 
 static s32 ftp_REST(client_t *client, char *offset_str) {
-    s64 offset;
+    off_t offset;
     if (sscanf(offset_str, "%lli", &offset) < 1 || offset < 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
@@ -519,6 +523,18 @@ static s32 ftp_SITE_UNKNOWN(client_t *client, char *rest) {
     return write_reply(client, 501, "Unknown SITE command.");
 }
 
+static s32 ftp_SITE_LOAD(client_t *client, char *path) {
+    FILE *f = vrt_fopen(client->cwd, path, "rb");
+    if (!f) return write_reply(client, 550, strerror(errno));
+    char *real_path = to_real_path(client->cwd, path);
+    if (!real_path) goto end;
+    load_from_file(f, real_path);
+    free(real_path);
+    end:
+    fclose(f);
+    return write_reply(client, 500, "Unable to load.");
+}
+
 typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 
 static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **commands, const ftp_command_handler *handlers) {
@@ -532,8 +548,8 @@ static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **co
     return handlers[i](client, rest);
 }
 
-static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", NULL };
-static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT, ftp_SITE_UNKNOWN };
+static const char *site_commands[] = { "LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", "LOAD", NULL };
+static const ftp_command_handler site_handlers[] = { ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT, ftp_SITE_LOAD, ftp_SITE_UNKNOWN };
 
 static s32 ftp_SITE(client_t *client, char *cmd_line) {
     return dispatch_to_handler(client, cmd_line, site_commands, site_handlers);
