@@ -48,7 +48,7 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
                 Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
                 Fixed logic bug where some files under /fst appear in the wrong directories.
                 Fixed display initialisation bug causing intermittent blank display on startup.
-                Added SITE LOAD command to run DOL executables.
+                Added SITE LOAD command to run DOL executables. (thanks svpe/shagkur!)
                 Added virtual metadata directories under /fst.
 20081126 0.0.16 Added support for wiimote power button.
                 Added SITE MOUNT and SITE UNMOUNT commands.

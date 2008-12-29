@@ -23,6 +23,11 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+/*
+This code is based heavily off the DOL-loading code in svpe's sdelfloader which contains the
+following comment:
+    this code was contributed by shagkur of the devkitpro team, thx!
+*/
 #include <gccore.h>
 #include <gctypes.h>
 #include <ogc/machine/processor.h>
