@@ -460,7 +460,7 @@ typedef struct {
     u32 filelen;
 } __attribute__((packed)) FST_ENTRY;
 
-static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir, char *name) {
+static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir, const char *name) {
     DIR_ENTRY *newChildren = realloc(dir->children, (dir->fileCount + 1) * sizeof(DIR_ENTRY));
     if (!newChildren) return NULL;
     bzero(newChildren + dir->fileCount, sizeof(DIR_ENTRY));
@@ -472,7 +472,7 @@ static DIR_ENTRY *add_child_entry(DIR_ENTRY *dir, char *name) {
     return child;
 }
 
-static u32 read_fst(DIR_ENTRY *entry, FST_ENTRY *fst, char *name_table, s32 index) {
+static s32 read_fst(DIR_ENTRY *entry, FST_ENTRY *fst, char *name_table, s32 index) {
     FST_ENTRY *fst_entry = fst + index;
     
     if (index > 0) {
@@ -596,6 +596,26 @@ static bool add_fst_entry(DIR_ENTRY *partition) {
     return true;
 }
 
+static DIR_ENTRY *add_partition_entry(u32 partition_number) {
+    char partition_name[3];
+    sprintf(partition_name, "%u", partition_number);
+    DIR_ENTRY *partition_entry = add_child_entry(root, partition_name);
+    if (!partition_entry) return NULL;
+    partition_entry->flags = FLAG_DIR;
+    partition_entry->partition = partition_number;
+    return partition_entry;
+}
+
+static DIR_ENTRY *add_metadata_entry(u32 partition_number) {
+    char meta_name[12];
+    sprintf(meta_name, "%u_metadata", partition_number);
+    DIR_ENTRY *meta_entry = add_child_entry(root, meta_name);
+    if (!meta_entry) return NULL;
+    meta_entry->flags = FLAG_DIR;
+    meta_entry->partition = partition_number;
+    return meta_entry;
+}
+
 static bool read_disc() {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
     DISC_HEADER *header = (DISC_HEADER *)read_buffer;
@@ -624,27 +644,27 @@ static bool read_disc() {
                 partitions = newPartitions;
                 bzero(partitions + partition_count, sizeof(PARTITION));
                 PARTITION *partition = partitions + partition_count;
-                char partition_name[3];
-                sprintf(partition_name, "%u", partition_count);
-                DIR_ENTRY *partition_entry = add_child_entry(root, partition_name);
-                if (!partition_entry) return false;
-                partition_entry->flags = FLAG_DIR;
-                partition_entry->partition = partition_count;
                 partition->offset = entries[partition_index].offset;
+
+                if (!add_partition_entry(partition_count)) return false;
+                DIR_ENTRY *meta_entry = add_metadata_entry(partition_count);
+                if (!meta_entry) return false;
+                DIR_ENTRY *partition_entry = meta_entry - 1;
 
                 if (!read_title_key(partition)) return false;
                 if (!read_data_offset(partition)) return false;
 
                 if (DI_OpenPartition(partition->offset)) return false;
+
                 if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) goto error;
                 memcpy(&partition->fst_info, read_buffer, sizeof(FST_INFO));
 
-                if (!add_appldr_entry(partition_entry)) goto error;
+                if (!add_appldr_entry(meta_entry)) goto error;
                 if (partition->fst_info.dol_offset) {
-                    if (!add_dol_entry(partition_entry)) goto error;
+                    if (!add_dol_entry(meta_entry)) goto error;
                 }
                 if (partition->fst_info.fst_offset && partition->fst_info.fst_size) {
-                    if (!add_fst_entry(partition_entry)) goto error;
+                    if (!add_fst_entry(meta_entry)) goto error;
                     if (!read_partition(partition_entry)) goto error;
                 }
 
