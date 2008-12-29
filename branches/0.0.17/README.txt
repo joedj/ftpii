@@ -26,7 +26,7 @@ homebrew/development environment that it is.
  - read data and control connection at same time
  - multiple data connections for single client (?)
  - ABOR, STAT, HELP, FEAT
- - mem card slots, NAND, dvd
+ - mem card slots, NAND
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
  - nice UI ;-)
@@ -46,8 +46,10 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
 
 20081228 0.0.17 Upgraded to devkitPPC r16.
                 Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
+                Fixed logic bug where some files under /fst appear in the wrong directories.
                 Fixed display initialisation bug causing intermittent blank display on startup.
                 Added SITE LOAD command to run DOL executables.
+                Added virtual metadata directories under /fst.
 20081126 0.0.16 Added support for wiimote power button.
                 Added SITE MOUNT and SITE UNMOUNT commands.
                 Added SITE EJECT command to eject DVD.
