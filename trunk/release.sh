@@ -11,8 +11,7 @@ make clean && \
 make && \
 cd .. && \
 mkdir ftpii && \
-mv hbc/meta.xml ftpii && \
-mv hbc/icon.png ftpii && \
+mv README.txt LICENSE.txt hbc/* ftpii && \
 cp source/ftpii.dol ftpii/boot.dol && \
 rm -rf source hbc patches && \
 (find . -name .svn | xargs rm -rf) && \
