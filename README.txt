@@ -44,7 +44,7 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20081228 0.0.17 Upgraded to devkitPPC r16.
+20081229 0.0.17 Upgraded to devkitPPC r16.
                 Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
                 Fixed logic bug where some files under /fst appear in the wrong directories.
                 Fixed display initialisation bug causing intermittent blank display on startup.
