@@ -66,7 +66,7 @@ typedef struct {
 typedef struct DIR_ENTRY_STRUCT {
     char *name;
     u32 partition;
-    u32 offset; // offset in partition >> 2, or fst index for dirs
+    u32 offset;
     u32 size;
     u8 flags;
     u32 fileCount;
@@ -689,9 +689,7 @@ static bool read_disc() {
 
 static void cleanup_recursive(DIR_ENTRY *entry) {
     u32 i;
-    for (i = 0; i < entry->fileCount; i++)
-        if (is_dir(&entry->children[i]))
-            cleanup_recursive(&entry->children[i]);
+    for (i = 0; i < entry->fileCount; i++) cleanup_recursive(&entry->children[i]);
     if (entry->children) free(entry->children);
     if (entry->name) free(entry->name);
 }
