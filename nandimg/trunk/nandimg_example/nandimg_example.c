@@ -29,17 +29,19 @@ misrepresented as being the original software.
 #include <string.h>
 #include <sys/dir.h>
 #include <unistd.h>
-#include <wiiuse/wpad.h>
 #include <nandimg/nandimg.h>
 
 static void initialise_video() {
     VIDEO_Init();
     GXRModeObj *rmode = VIDEO_GetPreferredMode(NULL);
-    void *xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
     VIDEO_Configure(rmode);
-    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
-    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
+    void *xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
     VIDEO_SetNextFramebuffer(xfb);
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
+    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
 }
@@ -52,7 +54,6 @@ static bool initialise() {
 int main(int argc, char **argv) {
     initialise_video();
     PAD_Init();
-    WPAD_Init();
 
     if (!initialise()) {
         printf("Unable to initialise.\n");
