@@ -10,7 +10,7 @@ ftpii uses the DI_ReadDVD function provided by libdi.
 
 || *Disc type* || *Normal + no chip* || *Normal + incompatible chip* || *PatchMii + no chip* || *PatchMii + incompatible chip* ||
 || *DVD-ROM* || Yes || No || No || Yes ||
-|| *Wii/GC* || No || No || Yes || Yes ||
+|| *Wii or GameCube* || No || No || Yes || Yes ||
 
 
 = Summary =
