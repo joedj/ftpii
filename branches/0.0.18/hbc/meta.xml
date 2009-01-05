@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<app version="1">
+  <name>ftpii</name>
+  <coder>joedj</coder>
+  <version>0.0.17</version>
+  <release_date>20081230220000</release_date>
+  <short_description>An FTP server</short_description> 
+  <long_description>ftpii is an FTP server.
+
+To exit, hold A on controller #1 or press the reset button.
+To remount a device, hold B on controller #1.
+To specify a password, rename the apps/ftpii directory to apps/ftpii_YourPassword.
+To specify a password remotely, use the SITE PASSWD and SITE NOPASSWD commands.
+
+A working DVDx installation is required for the DVD features.</long_description> 
+
+</app>
