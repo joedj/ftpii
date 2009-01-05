@@ -24,10 +24,8 @@ misrepresented as being the original software.
 
 */
 #include <errno.h>
-// #include <ogc/lwp_watchdog.h>
 #include <ogcsys.h>
 #include <stdio.h>
-// #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
 #include <sys/iosupport.h>
@@ -36,16 +34,18 @@ misrepresented as being the original software.
 
 #define DEVICE_NAME "nand"
 
-#define NAND_SIZE_WITH_ECC 69
-#define NAND_SIZE_WITHOUT_ECC 64
+#define NAND_SIZE_WITH_ECC 0x21000000
+#define NAND_SIZE_WITHOUT_ECC 0x20000000
 
 #define DIR_SEPARATOR '/'
-#define SECTOR_SIZE 0x800
-#define BUFFER_SIZE 0x8000
+#define ECC_SIZE 0x40
+#define BLOCK_SIZE_WITHOUT_ECC 0x800
+#define BLOCK_SIZE (BLOCK_SIZE_WITHOUT_ECC + ECC_SIZE)
 
 typedef struct {
     char name[NANDIMG_MAXPATHLEN];
     u32 size;
+    u32 block_size;
 } DIR_ENTRY;
 
 typedef struct {
@@ -61,16 +61,16 @@ typedef struct {
 } DIR_STATE_STRUCT;
 
 static DIR_ENTRY entries[] = {
-    { "", 0 },
-    { "nand_with_ecc.img", NAND_SIZE_WITH_ECC },
-    { "nand_without_ecc.img", NAND_SIZE_WITHOUT_ECC }
+    { "", 0, 0 },
+    { "wii_nand_with_ecc.img", NAND_SIZE_WITH_ECC, BLOCK_SIZE },
+    { "wii_nand_without_ecc.img", NAND_SIZE_WITHOUT_ECC, BLOCK_SIZE_WITHOUT_ECC }
 };
 static const u32 FILE_COUNT = sizeof(entries) / sizeof(DIR_ENTRY);
 
-static u8 read_buffer[BUFFER_SIZE] __attribute__((aligned(32)));
-static u32 cache_start = 0;
-static u32 cache_sectors = 0;
+static u8 block_buffer[BLOCK_SIZE] __attribute__((aligned(32)));
+static s32 cache_block = -1;
 static s32 dotab_device = -1;
+static s32 nand_fd = -1;
 
 static bool invalid_drive_specifier(const char *path) {
     if (strchr(path, ':') == NULL) return false;
@@ -124,8 +124,14 @@ static int _NANDIMG_close_r(struct _reent *r, int fd) {
     return 0;
 }
 
-static bool read_nand(u8 *buf, u32 sectors, u32 sector) {
-    return false; // err0r
+static bool read_nand(s32 block) {
+    if (IOS_Seek(nand_fd, block, SEEK_SET) != block) return false;
+    s32 result = IOS_Read(nand_fd, block_buffer, BLOCK_SIZE);
+    if (result != BLOCK_SIZE) {
+        if (result == -12) memset(block_buffer, 0xff, BLOCK_SIZE);
+        else return false;
+    }
+    return true;
 }
 
 static int _NANDIMG_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
@@ -146,27 +152,20 @@ static int _NANDIMG_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
         return 0;
     }
 
-    u32 sector = file->offset / SECTOR_SIZE;
-    u32 end_sector = (file->offset + len - 1) / SECTOR_SIZE;
-    u32 sector_offset = file->offset % SECTOR_SIZE;
-    u32 sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, end_sector - sector + 1);
-    len = MIN(BUFFER_SIZE - sector_offset, len);
+    s32 block = file->offset / file->entry->block_size;
+    u32 block_offset = file->offset % file->entry->block_size;
+    len = MIN(file->entry->block_size - block_offset, len);
 
-    if (cache_sectors && sector >= cache_start && (sector + sectors) <= (cache_start + cache_sectors)) {
-        memcpy(ptr, read_buffer + (sector - cache_start) * SECTOR_SIZE + sector_offset, len);
-        file->offset += len;
-        return len;
+    if (block != cache_block) {
+        if (!read_nand(block)) {
+            cache_block = -1;
+            r->_errno = EIO;
+            return -1;
+        }
+        cache_block = block;
     }
 
-    u32 remaining_sectors = MIN(BUFFER_SIZE / SECTOR_SIZE, (file->entry->size - 1) / SECTOR_SIZE - sector + 1);
-    if (!read_nand(read_buffer, remaining_sectors, sector)) {
-        cache_sectors = 0;
-        r->_errno = EIO;
-        return -1;
-    }
-    cache_start = sector;
-    cache_sectors = remaining_sectors;
-    memcpy(ptr, read_buffer + sector_offset, len);
+    memcpy(ptr, block_buffer + block_offset, len);
     file->offset += len;
     return len;
 }
@@ -225,8 +224,8 @@ static void stat_entry(DIR_ENTRY *entry, struct stat *st) {
     st->st_spare2 = 0;
     st->st_ctime = 0;
     st->st_spare3 = 0;
-    st->st_blksize = SECTOR_SIZE;
-    st->st_blocks = (entry->size + SECTOR_SIZE - 1) / SECTOR_SIZE;
+    st->st_blksize = entry->block_size;
+    st->st_blocks = (entry->size + entry->block_size - 1) / entry->block_size;
     st->st_spare4[0] = 0;
     st->st_spare4[1] = 0;
 }
@@ -340,13 +339,17 @@ static const devoptab_t dotab_nandimg = {
 
 bool NANDIMG_Mount() {
     NANDIMG_Unmount();
-    bool success = (dotab_device = AddDevice(&dotab_nandimg)) >= 0;
+    bool success = (nand_fd = IOS_Open("/dev/flash", 1)) >= 0 && (dotab_device = AddDevice(&dotab_nandimg)) >= 0;
     if (!success) NANDIMG_Unmount();
     return success;
 }
 
 bool NANDIMG_Unmount() {
-    cache_sectors = 0;
+    if (nand_fd >= 0) {
+        IOS_Close(nand_fd);
+        nand_fd = -1;
+    }
+    cache_block = -1;
     if (dotab_device >= 0) {
         dotab_device = -1;
         return !RemoveDevice(DEVICE_NAME ":/");
