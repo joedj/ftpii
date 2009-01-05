@@ -17,7 +17,7 @@ PRELOADER_OBJS = _$(TARGET).dol.o preloader.o dol.o
 PRELOADER_LDFLAGS = -L$(LIBOGC_LIB) -logc -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 PRELOADER_DEPENDS := $(PRELOADER_OBJS:.o=.d)
 
-LDFLAGS = -lfst -lwod -liso -ldi -lwiiuse -lbte -lfat -lm $(PRELOADER_LDFLAGS),--section-start,.init=0x80a00000
+LDFLAGS = -lnandimg -lfst -lwod -liso -ldi -lwiiuse -lbte -lfat -lm $(PRELOADER_LDFLAGS),--section-start,.init=0x80a00000
 
 export LD := $(CC)
 

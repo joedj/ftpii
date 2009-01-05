@@ -30,8 +30,8 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <sys/dir.h>
 
-typedef enum { PA_SD = 0, PA_USB, PA_DVD, PA_WOD, PA_FST } VIRTUAL_PARTITION;
-const char *VIRTUAL_PARTITION_ALIASES[5];
+typedef enum { PA_GCSDA = 0, PA_GCSDB, PA_SD, PA_USB, PA_DVD, PA_WOD, PA_FST, PA_NANDIMG } VIRTUAL_PARTITION;
+const char *VIRTUAL_PARTITION_ALIASES[8];
 const u32 MAX_VIRTUAL_PARTITION_ALIASES;
 
 bool initialise_fat();

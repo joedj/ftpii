@@ -27,7 +27,8 @@ homebrew/development environment that it is.
  - read data and control connection at same time
  - multiple data connections for single client (?)
  - ABOR, STAT, HELP, FEAT
- - mem card slots, NAND
+ - gamecube memory cards
+ - NAND filesystem
  - eliminate die() where possible
  - SITE LOAD (load a .dol or .elf)
  - nice UI ;-)
@@ -45,6 +46,8 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20090105 0.0.18 Enabled SD Gecko at /gcsda and /gcsdb. (thanks dhewg!)
+                Added NAND image support at /nand (libnandimg). 
 20081230 0.0.17 Upgraded to devkitPPC r16.
                 Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
                 Fixed logic bug where some files under /fst appear in the wrong directories.

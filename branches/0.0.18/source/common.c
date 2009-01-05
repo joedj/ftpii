@@ -42,12 +42,14 @@ misrepresented as being the original software.
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
 
-const char *VIRTUAL_PARTITION_ALIASES[] = { "/sd", "/usb", "/dvd", "/wod", "/fst" };
+const char *VIRTUAL_PARTITION_ALIASES[] = { "/gcsda", "/gcsdb", "/sd", "/usb", "/dvd", "/wod", "/fst", "/nand" };
 const u32 MAX_VIRTUAL_PARTITION_ALIASES = (sizeof(VIRTUAL_PARTITION_ALIASES) / sizeof(char *));
-static const char *REAL_PREFIXES[] = { "sd:/", "usb:/", "dvd:/", "wod:/", "fst:/" };
-extern const DISC_INTERFACE __io_usbstorage;
+static const char *REAL_PREFIXES[] = { "gcsdb:/", "gcsdb:/", "sd:/", "usb:/", "dvd:/", "wod:/", "fst:/", "nand:/" };
+extern const DISC_INTERFACE __io_gcsda;
+extern const DISC_INTERFACE __io_gcsdb;
 extern const DISC_INTERFACE __io_wiisd;
-static const DISC_INTERFACE *DISC_INTERFACES[] = { &__io_wiisd, &__io_usbstorage };
+extern const DISC_INTERFACE __io_usbstorage;
+static const DISC_INTERFACE *DISC_INTERFACES[] = { &__io_gcsda, &__io_gcsdb, &__io_wiisd, &__io_usbstorage };
 
 static const u32 CACHE_PAGES = 8192;
 
@@ -91,7 +93,7 @@ const char *to_real_prefix(VIRTUAL_PARTITION partition) {
 }
 
 static bool is_fat(VIRTUAL_PARTITION partition) {
-    return partition == PA_SD || partition == PA_USB;
+    return partition == PA_SD || partition == PA_USB || partition == PA_GCSDA || partition == PA_GCSDB;
 }
 
 static bool is_dvd(VIRTUAL_PARTITION partition) {

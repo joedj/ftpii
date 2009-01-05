@@ -26,6 +26,7 @@ misrepresented as being the original software.
 #include <di/di.h>
 #include <fst/fst.h>
 #include <iso/iso.h>
+#include <nandimg/nandimg.h>
 #include <string.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
@@ -45,6 +46,7 @@ static void initialise_ftpii() {
     initialise_reset_buttons();
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     initialise_network();
+    NANDIMG_Mount();
     initialise_fat();
     printf("To remount a device, hold B on controller #1.\n");
 }
