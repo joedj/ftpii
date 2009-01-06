@@ -58,15 +58,11 @@ const char *to_real_prefix(VIRTUAL_PARTITION partition);
 
 bool mounted(VIRTUAL_PARTITION partition);
 
-bool inserted(VIRTUAL_PARTITION partition);
-
-bool mount(VIRTUAL_PARTITION partition);
-
-bool unmount(VIRTUAL_PARTITION partition);
-
 bool mount_virtual(const char *dir);
 
 bool unmount_virtual(const char *dir);
+
+void check_removable_devices();
 
 bool dvd_mountWait();
 
