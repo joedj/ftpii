@@ -56,6 +56,7 @@ static const u32 CACHE_PAGES = 8;
 static bool fatInitState = false;
 static bool _dvd_mountWait = false;
 static u64 dvd_last_stopped = 0;
+static u32 device_check_iteration = 0;
 
 bool hbc_stub() {
     return !!*(u32 *)0x80001800;
@@ -117,7 +118,7 @@ bool mounted(VIRTUAL_PARTITION partition) {
     return false;
 }
 
-bool inserted(VIRTUAL_PARTITION partition) {
+static bool inserted(VIRTUAL_PARTITION partition) {
     return DISC_INTERFACES[partition]->isInserted();
 }
 
@@ -138,18 +139,6 @@ s32 dvd_stop() {
     return DI_StopMotor();
 }
 
-static void dvd_unmount() {
-    unmount(PA_WOD);
-    unmount(PA_FST);
-    unmount(PA_DVD);
-    dvd_stop();
-}
-
-s32 dvd_eject() {
-    dvd_unmount();
-    return DI_Eject();
-}
-
 static void fat_enable_readahead(VIRTUAL_PARTITION partition) {
     // if (!fatEnableReadAhead(to_real_prefix(partition), 64, 128))
     //     printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", VIRTUAL_PARTITION_ALIASES[partition]);
@@ -163,16 +152,14 @@ static void fat_enable_readahead_all() {
 }
 
 bool initialise_fat() {
-    if (!fatInitState && !fatInit(CACHE_PAGES, false)) { 
-        printf("Unable to initialise FAT subsystem.  Are there any connected devices?\n"); 
-    } else {
+    if (fatInitState || fatInit(CACHE_PAGES, false)) { 
         fatInitState = 1;
         fat_enable_readahead_all();
     }
     return fatInitState;
 }
 
-bool mount(VIRTUAL_PARTITION partition) {
+static bool mount(VIRTUAL_PARTITION partition) {
     if (partition >= MAX_VIRTUAL_PARTITION_ALIASES || mounted(partition)) return false;
     
     bool success = false;
@@ -216,7 +203,7 @@ bool mount_virtual(const char *dir) {
     return mount(to_virtual_partition(dir));
 }
 
-bool unmount(VIRTUAL_PARTITION partition) {
+static bool unmount(VIRTUAL_PARTITION partition) {
     if (partition >= MAX_VIRTUAL_PARTITION_ALIASES || !mounted(partition)) return false;
 
     printf("Unmounting %s...", VIRTUAL_PARTITION_ALIASES[partition]);
@@ -237,6 +224,34 @@ bool unmount(VIRTUAL_PARTITION partition) {
 
 bool unmount_virtual(const char *dir) {
     return unmount(to_virtual_partition(dir));
+}
+
+void check_removable_devices() {
+    if (device_check_iteration++ % 100) return;
+
+    VIRTUAL_PARTITION partition;
+    for (partition = PA_GCSDA; partition < PA_DVD; partition++) {
+        bool _mounted = mounted(partition);
+        if (_mounted && !inserted(partition)) {
+            printf("%s removed; ", VIRTUAL_PARTITION_ALIASES[partition]);
+            unmount(partition);
+        } else if (!_mounted && DISC_INTERFACES[partition]->startup() && inserted(partition)) {
+            printf("%s inserted; ", VIRTUAL_PARTITION_ALIASES[partition]);
+            mount(partition);
+        }
+    }
+}
+
+static void dvd_unmount() {
+    unmount(PA_WOD);
+    unmount(PA_FST);
+    unmount(PA_DVD);
+    dvd_stop();
+}
+
+s32 dvd_eject() {
+    dvd_unmount();
+    return DI_Eject();
 }
 
 static volatile u8 _reset = 0;

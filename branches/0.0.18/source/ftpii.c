@@ -38,10 +38,6 @@ misrepresented as being the original software.
 static const u16 PORT = 21;
 static const char *APP_DIR_PREFIX = "ftpii_";
 
-#define MICROSLEEP 5000
-#define DEVICE_CHECK_ITERATIONS (500000 / MICROSLEEP)
-static u32 device_check_iteration = 0;
-
 static void initialise_ftpii() {
     DI_Init();
     initialise_video();
@@ -97,28 +93,6 @@ static void process_dvd_events() {
     }
 }
 
-extern const DISC_INTERFACE __io_gcsda;
-extern const DISC_INTERFACE __io_gcsdb;
-extern const DISC_INTERFACE __io_wiisd;
-extern const DISC_INTERFACE __io_usbstorage;
-
-static void check_removable_devices() {
-    if (device_check_iteration++ % DEVICE_CHECK_ITERATIONS) return;
-
-    VIRTUAL_PARTITION partition;
-    for (partition = PA_GCSDA; partition < PA_DVD; partition++) {
-        bool _mounted = mounted(partition);
-        bool _inserted = inserted(partition);
-        if (_mounted && !_inserted) {
-            printf("%s removed; ", VIRTUAL_PARTITION_ALIASES[partition]);
-            unmount(partition);
-        } else if (!_mounted && _inserted) {
-            printf("%s inserted; ", VIRTUAL_PARTITION_ALIASES[partition]);
-            mount(partition);
-        }
-    }
-}
-
 int main(int argc, char **argv) {
     initialise_ftpii();
 
@@ -131,13 +105,13 @@ int main(int argc, char **argv) {
     s32 server = create_server(PORT);
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
+        check_removable_devices();
         process_dvd_events();
         process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
         process_timer_events();
-        check_removable_devices();
-        usleep(MICROSLEEP);
+        usleep(5000);
     }
     cleanup_ftp();
     net_close(server);
