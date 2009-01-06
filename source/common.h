@@ -56,11 +56,17 @@ void initialise_video();
 
 const char *to_real_prefix(VIRTUAL_PARTITION partition);
 
-bool mount_virtual(char *dir);
-
-bool unmount_virtual(char *dir);
-
 bool mounted(VIRTUAL_PARTITION partition);
+
+bool inserted(VIRTUAL_PARTITION partition);
+
+bool mount(VIRTUAL_PARTITION partition);
+
+bool unmount(VIRTUAL_PARTITION partition);
+
+bool mount_virtual(const char *dir);
+
+bool unmount_virtual(const char *dir);
 
 bool dvd_mountWait();
 
