@@ -82,9 +82,13 @@ static void process_gamecube_events() {
 static void process_dvd_events() {
     if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
         set_dvd_mountWait(false);
-        bool wod = mount(PA_WOD);
-        bool fst = mount(PA_FST);
-        bool iso = mount(PA_DVD);
+        bool wod = false, fst = false, iso = false;
+        printf("Mounting %s at %s...", PA_WOD->name, PA_WOD->alias);
+        printf((wod = WOD_Mount()) ? "succeeded.\n" : "failed.\n");
+        printf("Mounting %s at %s...", PA_FST->name, PA_FST->alias);
+        printf((fst = FST_Mount()) ? "succeeded.\n" : "failed.\n");
+        printf("Mounting %s at %s...", PA_DVD->name, PA_DVD->alias);
+        printf((iso = ISO9660_Mount()) ? "succeeded.\n" : "failed.\n");
         if (!(wod || fst || iso)) dvd_stop();
     }
 }

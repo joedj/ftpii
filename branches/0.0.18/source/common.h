@@ -30,9 +30,25 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <sys/dir.h>
 
-typedef enum { PA_GCSDA = 0, PA_GCSDB, PA_SD, PA_USB, PA_DVD, PA_WOD, PA_FST, PA_NANDIMG } VIRTUAL_PARTITION;
-const char *VIRTUAL_PARTITION_ALIASES[8];
-const u32 MAX_VIRTUAL_PARTITION_ALIASES;
+typedef struct {
+    const char *name;
+    const char *alias;
+    const char *mount_point;
+    const char *prefix;
+    bool automount_failed;
+    const DISC_INTERFACE *disc;
+} VIRTUAL_PARTITION;
+
+VIRTUAL_PARTITION VIRTUAL_PARTITIONS[8];
+const u32 MAX_VIRTUAL_PARTITIONS;
+VIRTUAL_PARTITION *PA_GCSDA;
+VIRTUAL_PARTITION *PA_GCSDB;
+VIRTUAL_PARTITION *PA_SD;
+VIRTUAL_PARTITION *PA_USB;
+VIRTUAL_PARTITION *PA_DVD;
+VIRTUAL_PARTITION *PA_WOD;
+VIRTUAL_PARTITION *PA_FST;
+VIRTUAL_PARTITION *PA_NAND;
 
 bool initialise_fat();
 
@@ -54,11 +70,11 @@ u32 check_gamecube(u32 mask);
 
 void initialise_video();
 
-const char *to_real_prefix(VIRTUAL_PARTITION partition);
+const char *to_real_prefix(VIRTUAL_PARTITION *partition);
 
-bool mounted(VIRTUAL_PARTITION partition);
+bool mounted(VIRTUAL_PARTITION *partition);
 
-bool mount(VIRTUAL_PARTITION partition);
+bool mount(VIRTUAL_PARTITION *partition);
 
 bool mount_virtual(const char *dir);
 
