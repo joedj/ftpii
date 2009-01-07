@@ -418,6 +418,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
+    setbuf(f, NULL);
 
     int fd = fileno(f);
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
