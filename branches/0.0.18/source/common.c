@@ -159,12 +159,18 @@ bool initialise_fat() {
     return fatInitState;
 }
 
-static bool mount(VIRTUAL_PARTITION partition) {
+typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
+static mountstate_t mountstate = MOUNTSTATE_START;
+static VIRTUAL_PARTITION mount_partition = 0;
+static u64 mount_timer = 0;
+
+bool mount(VIRTUAL_PARTITION partition) {
     if (partition >= MAX_VIRTUAL_PARTITION_ALIASES || mounted(partition)) return false;
+    if (mounted(partition)) return true;
     
     bool success = false;
+    printf("Mounting %s...", VIRTUAL_PARTITION_ALIASES[partition]);
     if (is_dvd(partition)) {
-        printf("Mounting %s...\n", VIRTUAL_PARTITION_ALIASES[partition]);
         set_dvd_mountWait(true);
         DI_Mount();
         u64 timeout = gettime() + secs_to_ticks(10);
@@ -176,9 +182,7 @@ static bool mount(VIRTUAL_PARTITION partition) {
             else if (partition == PA_FST) success = FST_Mount();
         }
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
-        return success;
     } else if (is_fat(partition)) {
-        printf("Mounting %s...", VIRTUAL_PARTITION_ALIASES[partition]);
         if (!fatInitState) {
             if (!initialise_fat()) {
                 printf("unable to initialise FAT subsystem, unable to mount %s\n", VIRTUAL_PARTITION_ALIASES[partition]);
@@ -193,8 +197,8 @@ static bool mount(VIRTUAL_PARTITION partition) {
                 success = true;
             }
         }
-        printf(success ? "succeeded.\n" : "failed.\n");
     }
+    printf(success ? "succeeded.\n" : "failed.\n");
 
     return success;
 }
@@ -205,6 +209,7 @@ bool mount_virtual(const char *dir) {
 
 static bool unmount(VIRTUAL_PARTITION partition) {
     if (partition >= MAX_VIRTUAL_PARTITION_ALIASES || !mounted(partition)) return false;
+    if (!mounted(partition)) return true;
 
     printf("Unmounting %s...", VIRTUAL_PARTITION_ALIASES[partition]);
     bool success = false;
@@ -231,6 +236,7 @@ void check_removable_devices() {
 
     VIRTUAL_PARTITION partition;
     for (partition = PA_GCSDA; partition < PA_DVD; partition++) {
+        if (mount_timer && partition == mount_partition) continue;
         bool _mounted = mounted(partition);
         if (_mounted && !inserted(partition)) {
             printf("%s removed; ", VIRTUAL_PARTITION_ALIASES[partition]);
@@ -280,29 +286,30 @@ void initialise_reset_buttons() {
     WPAD_SetPowerButtonCallback(set_power_flag);
 }
 
-typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
-
-static mountstate_t mountstate = MOUNTSTATE_START;
-static VIRTUAL_PARTITION mount_partition;
-static u64 mount_timer = 0;
-
 void process_remount_event() {
     if (mountstate == MOUNTSTATE_START || mountstate == MOUNTSTATE_SELECTDEVICE) {
         mountstate = MOUNTSTATE_SELECTDEVICE;
+        mount_partition = MAX_VIRTUAL_PARTITION_ALIASES;
         printf("\nWhich device would you like to remount? (hold button on controller #1)\n\n");
         printf("               DVD (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
     } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
         mount_timer = 0;
+        mount_partition = MAX_VIRTUAL_PARTITION_ALIASES;
         mountstate = MOUNTSTATE_START;
-        mount(mount_partition);
+        if (is_dvd(mount_partition)) {
+            set_dvd_mountWait(true);
+            DI_Mount();
+            printf("Mounting DVD...\n");
+        } else {
+            mount(mount_partition);
+        }
     }
 }
 
 void process_device_select_event(u32 pressed) {
     if (mountstate == MOUNTSTATE_SELECTDEVICE) {
-        mount_partition = MAX_VIRTUAL_PARTITION_ALIASES;
         if (pressed & WPAD_BUTTON_LEFT) mount_partition = PA_SD;
         else if (pressed & WPAD_BUTTON_RIGHT) mount_partition = PA_USB;
         else if (pressed & WPAD_BUTTON_UP) mount_partition = PA_DVD;
