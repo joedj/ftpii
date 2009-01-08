@@ -50,7 +50,7 @@ extern const DISC_INTERFACE __io_usbstorage;
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, &__io_gcsda },
     { "SD Gecko B", "/gcsdb", "gcsdb", "gcsdb:/", false, &__io_gcsdb },
-    { "front SD", "/sd", "sd", "sd:/", false, &__io_wiisd },
+    { "Front SD", "/sd", "sd", "sd:/", false, &__io_wiisd },
     { "USB storage device", "/usb", "usb", "usb:/", false, &__io_usbstorage },
     { "ISO9660 filesystem", "/dvd", "dvd", "dvd:/", false, NULL },
     { "Wii disc image", "/wod", "wod", "wod:/", false, NULL },
@@ -216,6 +216,7 @@ bool mount(VIRTUAL_PARTITION *partition) {
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 
+    if (success) partition->automount_failed = false;
     return success;
 }
 
@@ -252,14 +253,19 @@ void check_removable_devices() {
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
         VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
-        if (mount_timer && partition == mount_partition) continue;
+        if (partition->automount_failed || !is_fat(partition) || (mount_timer && partition == mount_partition)) continue;
         bool _mounted = mounted(partition);
+        bool failed = false;
         if (_mounted && !inserted(partition)) {
             printf("Device removed; ");
-            unmount(partition);
+            failed = !unmount(partition);
         } else if (!_mounted && partition->disc && partition->disc->startup() && inserted(partition)) {
             printf("Device inserted; ");
-            mount(partition);
+            failed = !mount(partition);
+        }
+        if (failed) {
+            partition->automount_failed = true;
+            printf("Insertion or removal of %s will not be detected again until it is successfully mounted manually.\n", partition->name);
         }
     }
 }
