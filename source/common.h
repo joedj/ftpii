@@ -35,7 +35,7 @@ typedef struct {
     const char *alias;
     const char *mount_point;
     const char *prefix;
-    bool automount_failed;
+    bool inserted;
     const DISC_INTERFACE *disc;
 } VIRTUAL_PARTITION;
 

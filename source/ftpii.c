@@ -85,13 +85,10 @@ static void process_dvd_events() {
         bool wod = false, fst = false, iso = false;
         printf("Mounting %s at %s...", PA_WOD->name, PA_WOD->alias);
         printf((wod = WOD_Mount()) ? "succeeded.\n" : "failed.\n");
-        if (wod) PA_WOD->automount_failed = false;
         printf("Mounting %s at %s...", PA_FST->name, PA_FST->alias);
         printf((fst = FST_Mount()) ? "succeeded.\n" : "failed.\n");
-        if (fst) PA_FST->automount_failed = false;
         printf("Mounting %s at %s...", PA_DVD->name, PA_DVD->alias);
         printf((iso = ISO9660_Mount()) ? "succeeded.\n" : "failed.\n");
-        if (iso) PA_DVD->automount_failed = false;
         if (!(wod || fst || iso)) dvd_stop();
     }
 }
