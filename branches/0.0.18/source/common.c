@@ -55,7 +55,8 @@ VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "ISO9660 filesystem", "/dvd", "dvd", "dvd:/", false, NULL },
     { "Wii disc image", "/wod", "wod", "wod:/", false, NULL },
     { "Wii disc filesystem", "/fst", "fst", "fst:/", false, NULL },
-    { "NAND image", "/nand", "nand", "nand:/", false, NULL }
+    { "NAND images", "/nand", "nand", "nand:/", false, NULL },
+    { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, NULL }
 };
 const u32 MAX_VIRTUAL_PARTITIONS = (sizeof(VIRTUAL_PARTITIONS) / sizeof(VIRTUAL_PARTITION));
 
@@ -67,6 +68,7 @@ VIRTUAL_PARTITION *PA_DVD   = VIRTUAL_PARTITIONS + 4;
 VIRTUAL_PARTITION *PA_WOD   = VIRTUAL_PARTITIONS + 5;
 VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
 VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
+VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 7;
 
 static const u32 CACHE_PAGES = 8;
 
@@ -139,11 +141,9 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     if (!partition->disc) return false;
     bool already_inserted = partition->inserted || mounted(partition);
     if (!already_inserted && partition == PA_SD) partition->disc->startup();
-    if (partition == PA_GCSDA) printf("About to call isInserted on gecko...\n");
     fflush(stdout);
     VIDEO_WaitVSync();
     partition->inserted = partition->disc->isInserted();        
-    if (partition == PA_GCSDA) printf("Finished calling isInserted on gecko...\n");
     fflush(stdout);
     VIDEO_WaitVSync();
     return already_inserted != partition->inserted;
