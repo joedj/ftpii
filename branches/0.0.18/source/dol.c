@@ -68,7 +68,7 @@ static u32 load_dol_image(void *dolstart, struct __argv *argv) {
     if (argv && argv->argvMagic == ARGV_MAGIC) {
         void *new_argv = (void *)(dolfile->entry_point + 8);
         memmove(new_argv, argv, sizeof(*argv));
-        DCFlushRangeNoSync(new_argv, sizeof(*argv));
+        DCFlushRange(new_argv, sizeof(*argv));
     }
 
     return dolfile->entry_point;
