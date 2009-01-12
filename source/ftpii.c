@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <di/di.h>
 #include <fst/fst.h>
+#include <isfs/isfs.h>
 #include <iso/iso.h>
 #include <nandimg/nandimg.h>
 #include <string.h>
@@ -47,6 +48,7 @@ static void initialise_ftpii() {
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     initialise_network();
     NANDIMG_Mount();
+    if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
     initialise_fat();
     printf("To remount a device, hold B on controller #1.\n");
 }
