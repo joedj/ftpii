@@ -28,6 +28,10 @@ misrepresented as being the original software.
 #include <iso/iso.h>
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
+#include <ogc/mutex.h>
+#include <ogc/usbstorage.h>
+#include <sdcard/gcsd.h>
+#include <sdcard/wiisd_io.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,11 +45,6 @@ misrepresented as being the original software.
 
 #define NET_BUFFER_SIZE 32768
 #define FREAD_BUFFER_SIZE 32768
-
-extern const DISC_INTERFACE __io_gcsda;
-extern const DISC_INTERFACE __io_gcsdb;
-extern const DISC_INTERFACE __io_wiisd;
-extern const DISC_INTERFACE __io_usbstorage;
 
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, &__io_gcsda },

@@ -116,6 +116,4 @@ u32 split(char *s, char sep, u32 maxsplit, char *result[]);
 char *dirname(char *path);
 char *basename(char *path);
 
-extern u32 net_gethostip();
-
 #endif /* _COMMON_H_ */
