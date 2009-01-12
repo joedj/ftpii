@@ -135,8 +135,18 @@ bool mounted(VIRTUAL_PARTITION *partition) {
     return false;
 }
 
-static bool inserted(VIRTUAL_PARTITION *partition) {
-    return partition->disc ? partition->disc->isInserted() : mounted(partition);
+static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
+    if (!partition->disc) return false;
+    bool already_inserted = partition->inserted || mounted(partition);
+    if (!already_inserted && partition == PA_SD) partition->disc->startup();
+    if (partition == PA_GCSDA) printf("About to call isInserted on gecko...\n");
+    fflush(stdout);
+    VIDEO_WaitVSync();
+    partition->inserted = partition->disc->isInserted();        
+    if (partition == PA_GCSDA) printf("Finished calling isInserted on gecko...\n");
+    fflush(stdout);
+    VIDEO_WaitVSync();
+    return already_inserted != partition->inserted;
 }
 
 bool dvd_mountWait() {
@@ -170,7 +180,8 @@ static void fat_enable_readahead_all() {
 }
 
 bool initialise_fat() {
-    if (fatInitState || fatInit(CACHE_PAGES, false)) { 
+    if (fatInitState) return true;
+    if (fatInit(CACHE_PAGES, false)) { 
         fatInitState = 1;
         fat_enable_readahead_all();
     }
@@ -201,11 +212,7 @@ bool mount(VIRTUAL_PARTITION *partition) {
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
     } else if (is_fat(partition)) {
         if (!fatInitState) {
-            if (!initialise_fat()) {
-                printf("unable to initialise FAT subsystem, unable to mount %s\n", partition->name);
-                return false;
-            }
-            success = mounted(partition);
+            if (initialise_fat()) success = mounted(partition);
         } else {
             partition->disc->shutdown();
             if (partition->disc->startup() && fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
@@ -216,7 +223,6 @@ bool mount(VIRTUAL_PARTITION *partition) {
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 
-    if (success) partition->automount_failed = false;
     return success;
 }
 
@@ -253,19 +259,16 @@ void check_removable_devices() {
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
         VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
-        if (partition->automount_failed || !is_fat(partition) || (mount_timer && partition == mount_partition)) continue;
-        bool _mounted = mounted(partition);
-        bool failed = false;
-        if (_mounted && !inserted(partition)) {
-            printf("Device removed; ");
-            failed = !unmount(partition);
-        } else if (!_mounted && partition->disc && partition->disc->startup() && inserted(partition)) {
-            printf("Device inserted; ");
-            failed = !mount(partition);
-        }
-        if (failed) {
-            partition->automount_failed = true;
-            printf("Insertion or removal of %s will not be detected again until it is successfully mounted manually.\n", partition->name);
+        if (mount_timer && partition == mount_partition) continue;
+        if (was_inserted_or_removed(partition)) {
+            bool already_mounted = mounted(partition);
+            if (!already_mounted && partition->inserted) {
+                printf("Device inserted; ");
+                mount(partition);
+            } else if (already_mounted && !partition->inserted) {
+                printf("Device removed; ");
+                unmount(partition);
+            }
         }
     }
 }
