@@ -141,11 +141,7 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     if (!partition->disc) return false;
     bool already_inserted = partition->inserted || mounted(partition);
     if (!already_inserted && partition == PA_SD) partition->disc->startup();
-    fflush(stdout);
-    VIDEO_WaitVSync();
     partition->inserted = partition->disc->isInserted();        
-    fflush(stdout);
-    VIDEO_WaitVSync();
     return already_inserted != partition->inserted;
 }
 
