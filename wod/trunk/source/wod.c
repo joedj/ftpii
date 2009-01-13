@@ -450,6 +450,10 @@ static bool read_disc_info() {
         sprintf(entries[FILE_COUNT - 1].name, "%c%c%c%c%c%c %s (%s) [%s].img",
             info.header.disc_id, info.header.game_code[0], info.header.game_code[1], info.header.region_code, info.header.maker_code[0], info.header.maker_code[1],
             info.header.title, info.disc_type, info.region);
+        char *namechar = entries[FILE_COUNT - 1].name;
+        for (; *namechar; namechar++)
+            if (*namechar == ':' || *namechar == '/')
+                *namechar = ' ';
         entries[FILE_COUNT - 1].size = info.size;
     }
     return true;
