@@ -47,15 +47,15 @@ misrepresented as being the original software.
 #define FREAD_BUFFER_SIZE 32768
 
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
-    { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, &__io_gcsda },
-    { "SD Gecko B", "/gcsdb", "gcsdb", "gcsdb:/", false, &__io_gcsdb },
-    { "Front SD", "/sd", "sd", "sd:/", false, &__io_wiisd },
-    { "USB storage device", "/usb", "usb", "usb:/", false, &__io_usbstorage },
-    { "ISO9660 filesystem", "/dvd", "dvd", "dvd:/", false, NULL },
-    { "Wii disc image", "/wod", "wod", "wod:/", false, NULL },
-    { "Wii disc filesystem", "/fst", "fst", "fst:/", false, NULL },
-    { "NAND images", "/nand", "nand", "nand:/", false, NULL },
-    { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, NULL }
+    { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, false, &__io_gcsda },
+    { "SD Gecko B", "/gcsdb", "gcsdb", "gcsdb:/", false, false, &__io_gcsdb },
+    { "Front SD", "/sd", "sd", "sd:/", false, false, &__io_wiisd },
+    { "USB storage device", "/usb", "usb", "usb:/", false, false, &__io_usbstorage },
+    { "ISO9660 filesystem", "/dvd", "dvd", "dvd:/", false, false, NULL },
+    { "Wii disc image", "/wod", "wod", "wod:/", false, false, NULL },
+    { "Wii disc filesystem", "/fst", "fst", "fst:/", false, false, NULL },
+    { "NAND images", "/nand", "nand", "nand:/", false, false, NULL },
+    { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, false, NULL }
 };
 const u32 MAX_VIRTUAL_PARTITIONS = (sizeof(VIRTUAL_PARTITIONS) / sizeof(VIRTUAL_PARTITION));
 
@@ -120,8 +120,12 @@ static VIRTUAL_PARTITION *to_virtual_partition(const char *virtual_prefix) {
     return NULL;
 }
 
+static bool is_gecko(VIRTUAL_PARTITION *partition) {
+    return partition == PA_GCSDA || partition == PA_GCSDB;
+}
+
 static bool is_fat(VIRTUAL_PARTITION *partition) {
-    return partition == PA_SD || partition == PA_USB || partition == PA_GCSDA || partition == PA_GCSDB;
+    return partition == PA_SD || partition == PA_USB || is_gecko(partition);
 }
 
 static bool is_dvd(VIRTUAL_PARTITION *partition) {
@@ -138,7 +142,7 @@ bool mounted(VIRTUAL_PARTITION *partition) {
 }
 
 static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
-    if (!partition->disc) return false;
+    if (!partition->disc || partition->geckofail) return false;
     bool already_inserted = partition->inserted || mounted(partition);
     if (!already_inserted && partition == PA_SD) partition->disc->startup();
     partition->inserted = partition->disc->isInserted();        
@@ -207,17 +211,23 @@ bool mount(VIRTUAL_PARTITION *partition) {
         }
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
     } else if (is_fat(partition)) {
-        if (!fatInitState) {
-            if (initialise_fat()) success = mounted(partition);
-        } else {
-            partition->disc->shutdown();
-            if (partition->disc->startup() && fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
+        bool retry_gecko = true;
+        gecko_retry:
+        if (partition->disc->shutdown() & partition->disc->startup()) {
+            if (!fatInitState) {
+                if (initialise_fat()) success = mounted(partition);
+            } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
                 fat_enable_readahead(partition);
                 success = true;
             }
+        } else if (is_gecko(partition) && retry_gecko) {
+            retry_gecko = false;
+            sleep(1);
+            goto gecko_retry;
         }
     }
     printf(success ? "succeeded.\n" : "failed.\n");
+    if (success && is_gecko(partition)) partition->geckofail = false;
 
     return success;
 }
@@ -260,7 +270,11 @@ void check_removable_devices() {
             bool already_mounted = mounted(partition);
             if (!already_mounted && partition->inserted) {
                 printf("Device inserted; ");
-                mount(partition);
+                if (!mount(partition) && is_gecko(partition)) {
+                    printf("%s failed to automount.  Insertion or removal will not be detected until it is mounted manually.\n", partition->name);
+                    printf("Note that inserting an SD Gecko without an SD card in it can be problematic.\n");
+                    partition->geckofail = true;
+                }
             } else if (already_mounted && !partition->inserted) {
                 printf("Device removed; ");
                 unmount(partition);

@@ -36,6 +36,7 @@ typedef struct {
     const char *mount_point;
     const char *prefix;
     bool inserted;
+    bool geckofail;
     const DISC_INTERFACE *disc;
 } VIRTUAL_PARTITION;
 
