@@ -25,7 +25,9 @@ misrepresented as being the original software.
 #include <errno.h>
 #include <fat.h>
 #include <fst/fst.h>
+#include <isfs/isfs.h>
 #include <iso/iso.h>
+#include <nandimg/nandimg.h>
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <ogc/mutex.h>
@@ -67,7 +69,7 @@ VIRTUAL_PARTITION *PA_DVD   = VIRTUAL_PARTITIONS + 4;
 VIRTUAL_PARTITION *PA_WOD   = VIRTUAL_PARTITIONS + 5;
 VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
 VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
-VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 7;
+VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 8;
 
 static const u32 CACHE_PAGES = 8;
 static u32 NET_BUFFER_SIZE = MAX_NET_BUFFER_SIZE;
@@ -225,6 +227,10 @@ bool mount(VIRTUAL_PARTITION *partition) {
             sleep(1);
             goto gecko_retry;
         }
+    } else if (partition == PA_NAND) {
+        success = NANDIMG_Mount();
+    } else if (partition == PA_ISFS) {
+        success = ISFS_Mount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
     if (success && is_gecko(partition)) partition->geckofail = false;
@@ -236,7 +242,7 @@ bool mount_virtual(const char *dir) {
     return mount(to_virtual_partition(dir));
 }
 
-static bool unmount(VIRTUAL_PARTITION *partition) {
+bool unmount(VIRTUAL_PARTITION *partition) {
     if (!partition || !mounted(partition)) return false;
 
     printf("Unmounting %s...", partition->name);
@@ -249,6 +255,10 @@ static bool unmount(VIRTUAL_PARTITION *partition) {
     } else if (is_fat(partition)) {
         fatUnmount(to_real_prefix(partition));
         success = true;
+    } else if (partition == PA_NAND) {
+        success = NANDIMG_Unmount();
+    } else if (partition == PA_ISFS) {
+        success = ISFS_Unmount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 

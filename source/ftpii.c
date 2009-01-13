@@ -117,13 +117,16 @@ int main(int argc, char **argv) {
     }
     cleanup_ftp();
     net_close(server);
-    // TODO: unmount stuff
+
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) unmount(VIRTUAL_PARTITIONS + i);
 
     printf("\nKTHXBYE\n");
 
     if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     dvd_stop();
     DI_Close();
+    ISFS_Deinitialize();
 
     if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);

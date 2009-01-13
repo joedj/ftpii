@@ -78,6 +78,8 @@ bool mounted(VIRTUAL_PARTITION *partition);
 
 bool mount(VIRTUAL_PARTITION *partition);
 
+bool unmount(VIRTUAL_PARTITION *partition);
+
 bool mount_virtual(const char *dir);
 
 bool unmount_virtual(const char *dir);
