@@ -204,7 +204,7 @@ static VIRTUAL_PARTITION *mount_partition = NULL;
 static u64 mount_timer = 0;
 
 bool mount(VIRTUAL_PARTITION *partition) {
-    if (!partition || mounted(partition)) return false;
+    if (!partition || mounted(partition) || (is_dvd(partition) && dvd_mountWait())) return false;
     
     bool success = false;
     printf("Mounting %s...", partition->name);
@@ -251,7 +251,7 @@ bool mount_virtual(const char *dir) {
 }
 
 bool unmount(VIRTUAL_PARTITION *partition) {
-    if (!partition || !mounted(partition)) return false;
+    if (!partition || !mounted(partition) || (is_dvd(partition) && dvd_mountWait())) return false;
 
     printf("Unmounting %s...", partition->name);
     bool success = false;
@@ -377,7 +377,14 @@ void process_device_select_event(u32 pressed) {
         else if (pressed & WPAD_BUTTON_1) mount_partition = PA_DVD;
         if (mount_partition) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
-            if (is_dvd(mount_partition)) dvd_unmount();
+            if (is_dvd(mount_partition)) {
+                if (dvd_mountWait()) {
+                    printf("The DVD is in the process of being mounted, it is not a good idea to mess with it.\n");
+                    mountstate = MOUNTSTATE_START;
+                    return;
+                }
+                dvd_unmount();
+            }
             else if (is_fat(mount_partition)) unmount(mount_partition);
             printf("To continue after changing the device hold B on controller #1 or wait 30 seconds.\n");
             mount_timer = gettime() + secs_to_ticks(30);
