@@ -144,10 +144,17 @@ bool mounted(VIRTUAL_PARTITION *partition) {
 }
 
 static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
-    if (!partition->disc || partition->geckofail) return false;
+    if ((!partition->disc || partition->geckofail) && !is_dvd(partition)) return false;
     bool already_inserted = partition->inserted || mounted(partition);
     if (!already_inserted && partition == PA_SD) partition->disc->startup();
-    partition->inserted = partition->disc->isInserted();        
+    if (is_dvd(partition)) {
+        if (!dvd_mountWait()) {
+            u32 status;
+            if (!DI_GetCoverRegister(&status)) partition->inserted = (status & 2) == 2;
+        }
+    } else {
+        partition->inserted = partition->disc->isInserted();        
+    }
     return already_inserted != partition->inserted;
 }
 
@@ -277,15 +284,18 @@ void check_removable_devices() {
         VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
         if (mount_timer && partition == mount_partition) continue;
         if (was_inserted_or_removed(partition)) {
-            bool already_mounted = mounted(partition);
-            if (!already_mounted && partition->inserted) {
+            if (partition->inserted && (partition == PA_DVD || (!is_dvd(partition) && !mounted(partition)))) {
                 printf("Device inserted; ");
-                if (!mount(partition) && is_gecko(partition)) {
+                if (partition == PA_DVD) {
+                    set_dvd_mountWait(true);
+                    DI_Mount();
+                    printf("Mounting DVD...\n");
+                } else if (!mount(partition) && is_gecko(partition)) {
                     printf("%s failed to automount.  Insertion or removal will not be detected until it is mounted manually.\n", partition->name);
                     printf("Note that inserting an SD Gecko without an SD card in it can be problematic.\n");
                     partition->geckofail = true;
                 }
-            } else if (already_mounted && !partition->inserted) {
+            } else if (!partition->inserted && mounted(partition)) {
                 printf("Device removed; ");
                 unmount(partition);
             }
