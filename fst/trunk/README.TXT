@@ -29,7 +29,3 @@ joedj @ EFNet #wiidev
 *** HISTORY ***
 
 For subversion changes, see http://code.google.com/p/ftpii/source/list
-
-20081221 0.0.2  Updated to work with devkitPPC r16.
-                Fixed a bug caused by attempting to read tables bigger than 32k.
-20081126 0.0.1  Public release.

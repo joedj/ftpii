@@ -28,6 +28,3 @@ joedj @ EFNet #wiidev
 *** HISTORY ***
 
 For subversion changes, see http://code.google.com/p/ftpii/source/list
-
-20081221 0.0.2  Updated to work with devkitPPC r16.
-20081126 0.0.1  Public release.

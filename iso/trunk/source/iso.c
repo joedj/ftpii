@@ -266,7 +266,7 @@ static char *dirname(char *path) {
     result[1024 - 1] = '\0';
     s32 i;
     for (i = strlen(result) - 1; i >= 0; i--) {
-        if (result[i] == '/') {
+        if (result[i] == DIR_SEPARATOR) {
             result[i] = '\0';
             return result;
         }
@@ -277,7 +277,7 @@ static char *dirname(char *path) {
 static char *basename(char *path) {
     s32 i;
     for (i = strlen(path) - 1; i >= 0; i--) {
-        if (path[i] == '/') {
+        if (path[i] == DIR_SEPARATOR) {
             return path + i + 1;
         }
     }
@@ -304,7 +304,7 @@ static bool entry_from_path(DIR_ENTRY *dir_entry, const char *const_path) {
 
     // strip trailing slashes except for root
     u32 len = strlen(path);
-    while (len > 1 && path[len - 1] == '/') {
+    while (len > 1 && path[len - 1] == DIR_SEPARATOR) {
         path[--len] = '\x00';
         
     }
@@ -667,7 +667,7 @@ bool ISO9660_Unmount() {
     last_access = 0;
     if (dotab_device >= 0) {
         dotab_device = -1;
-        return !RemoveDevice(DEVICE_NAME ":/");
+        return !RemoveDevice(DEVICE_NAME ":");
     }
     return true;
 }

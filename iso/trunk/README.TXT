@@ -27,9 +27,4 @@ joedj @ EFNet #wiidev
 
 *** HISTORY ***
 
-For subversion changes since 0.0.2, see http://code.google.com/p/ftpii/source/list
-
-20081221 0.0.3  Updated to work with devkitPPC r16.
-20081126 0.0.2  Read path table at mount time.
-                Lots of fixes and cleaning up.
-20080929 0.0.1  Public release.
+For subversion changes, see http://code.google.com/p/ftpii/source/list

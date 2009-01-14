@@ -32,7 +32,7 @@ misrepresented as being the original software.
 #include <unistd.h>
 #include <wod/wod.h>
 
-static void initialise_video() {
+void initialise_video() {
     VIDEO_Init();
     GXRModeObj *rmode = VIDEO_GetPreferredMode(NULL);
     VIDEO_Configure(rmode);
@@ -45,6 +45,8 @@ static void initialise_video() {
     CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
+    VIDEO_WaitVSync();
+    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
 }
 
 static bool initialise() {

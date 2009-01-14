@@ -452,7 +452,7 @@ static bool read_disc_info() {
             info.header.title, info.disc_type, info.region);
         char *namechar = entries[FILE_COUNT - 1].name;
         for (; *namechar; namechar++)
-            if (*namechar == ':' || *namechar == '/')
+            if (*namechar == ':' || *namechar == DIR_SEPARATOR)
                 *namechar = ' ';
         entries[FILE_COUNT - 1].size = info.size;
     }
@@ -478,7 +478,7 @@ bool WOD_Unmount() {
     last_access = 0;
     if (dotab_device >= 0) {
         dotab_device = -1;
-        return !RemoveDevice(DEVICE_NAME ":/");
+        return !RemoveDevice(DEVICE_NAME ":");
     }
     return true;
 }

@@ -352,7 +352,7 @@ bool NANDIMG_Unmount() {
     cache_block = -1;
     if (dotab_device >= 0) {
         dotab_device = -1;
-        return !RemoveDevice(DEVICE_NAME ":/");
+        return !RemoveDevice(DEVICE_NAME ":");
     }
     return true;
 }
