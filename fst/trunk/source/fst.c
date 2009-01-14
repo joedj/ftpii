@@ -40,6 +40,8 @@ misrepresented as being the original software.
 #define DEVICE_NAME "fst"
 
 #define FLAG_DIR 1
+#define FLAG_RAW 2
+
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
 #define BUFFER_SIZE 0x8000
@@ -57,10 +59,20 @@ typedef struct {
 } __attribute__ ((packed)) FST_INFO;
 
 typedef struct {
-    u32 offset;
+    u32 tmd_size;
+    u32 tmd_offset;
+    u32 cert_chain_size;
+    u32 cert_chain_offset;
+    u32 h3_offset;
     u32 data_offset;
+    u32 data_size;
+} __attribute__((packed)) PARTITION_INFO;
+
+typedef struct {
+    u32 offset;
     aeskey key;
     FST_INFO fst_info;
+    PARTITION_INFO partition_info;
 } PARTITION;
 
 typedef struct DIR_ENTRY_STRUCT {
@@ -245,17 +257,26 @@ static int _FST_read_r(struct _reent *r, int fd, char *ptr, size_t len) {
         return 0;
     }
 
-    u64 offset_from_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
-    u64 cluster_offset_from_data = (offset_from_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
-    u32 offset_from_cluster = offset_from_data % ENCRYPTED_CLUSTER_SIZE;
-    len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster, len);
     PARTITION *partition = partitions + file->entry->partition;
-    u64 data_offset = (partition->offset << 2LL) + (partition->data_offset << 2LL);
-    if (!read_and_decrypt_cluster(partition->key, cluster_buffer, data_offset + cluster_offset_from_data, offset_from_cluster, len)) {
-        r->_errno = EIO;
-        return -1;
+    if (file->entry->flags & FLAG_RAW) {
+        u64 offset = (partition->offset << 2LL) + (file->entry->offset << 2LL) + file->offset;
+        len = _read(ptr, offset, len);
+        if (len < 0) {
+            r->_errno = EIO;
+            return -1;
+        }
+    } else {
+        u64 offset_from_data = plaintext_to_cipher((file->entry->offset << 2LL) + file->offset);
+        u64 cluster_offset_from_data = (offset_from_data / ENCRYPTED_CLUSTER_SIZE) * ENCRYPTED_CLUSTER_SIZE;
+        u32 offset_from_cluster = offset_from_data % ENCRYPTED_CLUSTER_SIZE;
+        len = MIN(ENCRYPTED_CLUSTER_SIZE - offset_from_cluster, len);
+        u64 data_offset = (partition->offset << 2LL) + (partition->partition_info.data_offset << 2LL);
+        if (!read_and_decrypt_cluster(partition->key, cluster_buffer, data_offset + cluster_offset_from_data, offset_from_cluster, len)) {
+            r->_errno = EIO;
+            return -1;
+        }
+        memcpy(ptr, cluster_buffer, len);
     }
-    memcpy(ptr, cluster_buffer, len);
     file->offset += len;
     return len;
 }
@@ -530,7 +551,7 @@ static bool read_partition(DIR_ENTRY *partition) {
 
 static bool read_title_key(PARTITION *partition) {
     tik ticket;
-    if (_read(&ticket, (partition->offset << 2) + 0x140, sizeof(tik)) != sizeof(tik)) return false;
+    if (_read(&ticket, (partition->offset << 2) + sizeof(sig_rsa2048), sizeof(tik)) != sizeof(tik)) return false;
     u8 iv[16];
     bzero(iv, 16);
     memcpy(iv, &ticket.titleid, sizeof(ticket.titleid));
@@ -543,8 +564,28 @@ static bool read_title_key(PARTITION *partition) {
     return true;
 }
 
-static bool read_data_offset(PARTITION *partition) {
-    return _read(&partition->data_offset, (partition->offset << 2) + 0x2b8, sizeof(partition->data_offset)) == sizeof(partition->data_offset);
+static bool read_partition_info(PARTITION *partition) {
+    return _read(&partition->partition_info, (partition->offset << 2LL) + sizeof(sig_rsa2048) + sizeof(tik), sizeof(partition->partition_info)) == sizeof(partition->partition_info);
+}
+
+static bool add_ticket_entry(DIR_ENTRY *parent) {
+    DIR_ENTRY *entry = add_child_entry(parent, "ticket");
+    if (!entry) return false;
+    entry->size = STD_SIGNED_TIK_SIZE;
+    entry->flags = FLAG_RAW;
+    return true;
+}
+
+static bool add_tmd_entry(DIR_ENTRY *parent) {
+    PARTITION *partition = partitions + parent->partition;
+    tmd partition_tmd;
+    if (_read(&partition_tmd, (partition->offset << 2LL) + (partition->partition_info.tmd_offset << 2LL) + sizeof(sig_rsa2048), sizeof(tmd)) != sizeof(tmd)) return false;
+    DIR_ENTRY *entry = add_child_entry(parent, "TMD");
+    if (!entry) return false;
+    entry->size = sizeof(sig_rsa2048) + TMD_SIZE(&partition_tmd);
+    entry->offset = partition->partition_info.tmd_offset;
+    entry->flags = FLAG_RAW;
+    return true;
 }
 
 static bool add_header_entry(DIR_ENTRY *parent) {
@@ -659,7 +700,9 @@ static bool read_disc() {
                 DIR_ENTRY *partition_entry = meta_entry - 1;
 
                 if (!read_title_key(partition)) return false;
-                if (!read_data_offset(partition)) return false;
+                if (!read_partition_info(partition)) return false;
+                if (!add_ticket_entry(meta_entry)) return false;
+                if (!add_tmd_entry(meta_entry)) return false;
 
                 if (DI_OpenPartition(partition->offset)) return false;
 
