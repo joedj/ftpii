@@ -116,7 +116,7 @@ static bool is_dir(DIR_ENTRY *entry) {
 
 static bool invalid_drive_specifier(const char *path) {
     if (strchr(path, ':') == NULL) return false;
-	int namelen = strlen(DEVICE_NAME);
+    int namelen = strlen(DEVICE_NAME);
     if (!strncmp(DEVICE_NAME, path, namelen) && path[namelen] == ':') return false;
     return true;
 }

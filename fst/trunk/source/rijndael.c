@@ -360,7 +360,7 @@ void aes_decrypt(u8 *iv, u8 *inbuf, u8 *outbuf, unsigned long long len) {
     
     for(i=0; i < fraction; i++) 
       outbuf[blockno * sizeof(block) + i] =
-	ctext_ptr[i] ^ block[i];
+      ctext_ptr[i] ^ block[i];
     //    debug_printf("Block %d output: ", blockno);
     //    hexdump(outbuf + blockno*sizeof(block), 16);
   }
