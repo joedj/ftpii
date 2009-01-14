@@ -22,18 +22,6 @@ and all those who help make devkitPPC, libogc, libfat and The Homebrew Channel t
 homebrew/development environment that it is.
 
 
-*** TODO LIST *** (in no particular order):
-
- - read data and control connection at same time
- - multiple data connections for single client (?)
- - ABOR, STAT, HELP, FEAT
- - gamecube memory cards
- - NAND filesystem
- - eliminate die() where possible
- - SITE LOAD (load a .dol or .elf)
- - nice UI ;-)
-
-
 *** CONTACT ***
 
 http://code.google.com/p/ftpii/
