@@ -46,6 +46,7 @@ misrepresented as being the original software.
 #include "common.h"
 
 #define MAX_NET_BUFFER_SIZE 32768
+#define MIN_NET_BUFFER_SIZE 4096
 #define FREAD_BUFFER_SIZE 32768
 
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
@@ -346,9 +347,13 @@ void process_remount_event() {
         mountstate = MOUNTSTATE_SELECTDEVICE;
         mount_partition = NULL;
         printf("\nWhich device would you like to remount? (hold button on controller #1)\n\n");
-        printf("               DVD (Up)\n");
+        printf("           SD Gecko A (Up)\n");
         printf("                  | \n");
         printf("Front SD (Left) --+-- USB Storage Device (Right)\n");
+        printf("                  | \n");
+        printf("           SD Gecko B (Down)\n");
+        printf("                  | \n");
+        printf("              DVD (1/X)\n");
     } else if (mountstate == MOUNTSTATE_WAITFORDEVICE) {
         mount_timer = 0;
         mountstate = MOUNTSTATE_START;
@@ -367,7 +372,9 @@ void process_device_select_event(u32 pressed) {
     if (mountstate == MOUNTSTATE_SELECTDEVICE) {
         if (pressed & WPAD_BUTTON_LEFT) mount_partition = PA_SD;
         else if (pressed & WPAD_BUTTON_RIGHT) mount_partition = PA_USB;
-        else if (pressed & WPAD_BUTTON_UP) mount_partition = PA_DVD;
+        else if (pressed & WPAD_BUTTON_UP) mount_partition = PA_GCSDA;
+        else if (pressed & WPAD_BUTTON_DOWN) mount_partition = PA_GCSDB;
+        else if (pressed & WPAD_BUTTON_1) mount_partition = PA_DVD;
         if (mount_partition) {
             mountstate = MOUNTSTATE_WAITFORDEVICE;
             if (is_dvd(mount_partition)) dvd_unmount();
@@ -480,7 +487,7 @@ static s32 transfer_exact(s32 s, char *buf, s32 length, transferrer_type transfe
             buf += bytes_transferred;
         } else if (bytes_transferred < 0) {
             if (bytes_transferred == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = 4096;
+                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
                 goto try_again_with_smaller_buffer;
             }
             result = bytes_transferred;
@@ -531,7 +538,7 @@ s32 recv_to_file(s32 s, FILE *f) {
         bytes_read = net_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = 4096;
+                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
                 goto try_again_with_smaller_buffer;
             }
             // if (bytes_read != -EAGAIN) {
