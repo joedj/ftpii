@@ -26,6 +26,8 @@ BINFILES				:= $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 export OFILES			:= $(addsuffix .o,$(BINFILES)) common.o ftp.o loader.o vrt.o dol.o ftpii.o
 export PRELOADER_OFILES	:= _$(TARGET).dol.o preloader.o dol.o
 
+.PHONY: $(BUILD) clean run
+
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
 	@make --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
