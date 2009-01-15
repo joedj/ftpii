@@ -418,3 +418,12 @@ bool ISFS_Unmount() {
     }
     return true;
 }
+
+#include <certs_bin.h>
+#include <su_tik_bin.h>
+#include <su_tmd_bin.h>
+
+s32 ISFS_SU() {
+    u32 key = 0;
+    return ES_Identify((signed_blob *)certs_bin, certs_bin_size, (signed_blob *)su_tmd_bin, su_tmd_bin_size, (signed_blob *)su_tik_bin, su_tik_bin_size, &key);
+}
