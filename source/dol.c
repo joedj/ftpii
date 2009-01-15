@@ -49,7 +49,7 @@ typedef struct {
     u32 entry_point;
 } dolheader;
 
-static u32 load_dol_image(void *dolstart, struct __argv *argv) {
+static u32 load_dol_image(const void *dolstart, struct __argv *argv) {
     dolheader *dolfile = (dolheader *)dolstart;
     u32 i;
     for (i = 0; i < 7; i++) {
@@ -74,7 +74,7 @@ static u32 load_dol_image(void *dolstart, struct __argv *argv) {
     return dolfile->entry_point;
 }
 
-void run_dol(void *dol, struct __argv *argv) {
+void run_dol(const void *dol, struct __argv *argv) {
     u32 level;
     void (*ep)() = (void(*)())load_dol_image(dol, argv);
     __IOS_ShutdownSubsystems();

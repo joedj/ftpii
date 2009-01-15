@@ -9,28 +9,27 @@ include $(DEVKITPPC)/wii_rules
 TARGET	= ftpii
 SOURCES	= source
 BUILD	= build
-DATA	= data
 
-CFLAGS				= -g -O2 -Wall $(MACHDEP) $(INCLUDE) -I$(LIBOGC_INC)
+CFLAGS				= -g -O2 -Wall $(MACHDEP) $(INCLUDE)
 LDFLAGS				= -L$(LIBOGC_LIB) -lisfs -lnandimg -lfst -lwod -liso -ldi -lwiiuse -lbte -lfat -logc -lm -g $(MACHDEP) -Wl,-Map,$(notdir $@).map,--section-start,.init=0x80a00000
 PRELOADER_LDFLAGS	= -L$(LIBOGC_LIB) -logc -g $(MACHDEP) -Wl,-Map,$(notdir $@).map
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 
 export OUTPUT	:= $(CURDIR)/$(TARGET)
-export VPATH	:= $(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) $(foreach dir,$(DATA),$(CURDIR)/$(dir))
+export VPATH	:= $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR	:= $(CURDIR)/$(BUILD)
 export LD		:= $(CC)
 
-BINFILES				:= $(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
-export OFILES			:= $(addsuffix .o,$(BINFILES)) common.o ftp.o loader.o vrt.o dol.o ftpii.o
+export OFILES			:= common.o ftp.o loader.o vrt.o dol.o ftpii.o
 export PRELOADER_OFILES	:= _$(TARGET).dol.o preloader.o dol.o
+export INCLUDE			:= -I$(CURDIR)/$(BUILD) -I$(LIBOGC_INC)
 
 .PHONY: $(BUILD) clean run
 
 $(BUILD):
 	@[ -d $@ ] || mkdir -p $@
-	@make --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 clean:
 	@rm -rf $(BUILD) $(TARGET).dol $(TARGET).elf
@@ -47,12 +46,9 @@ $(OUTPUT).elf: $(PRELOADER_OFILES)
 	@$(LD) $^ $(PRELOADER_LDFLAGS) -o $@
 
 %.dol.o: %.dol
-	@bin2s $< | powerpc-gekko-as -o $@
+	@$(bin2o)
 
 _$(TARGET).elf: $(OFILES)
-
-%.bin.o: %.bin
-	@bin2s -a 32 $< | powerpc-gekko-as -o $@
 
 DEPENDS = $(OFILES:.o=.d) $(PRELOADER_OFILES:.o=.d)
 -include $(DEPENDS)
