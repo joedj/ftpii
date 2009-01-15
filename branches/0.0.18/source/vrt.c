@@ -216,7 +216,7 @@ int vrt_chdir(char *cwd, char *path) {
         return -1;
     }
     strcpy(cwd, abspath);
-    strcat(cwd, "/");
+    if (cwd[1]) strcat(cwd, "/");
     free(abspath);
     return 0;
 }
