@@ -48,6 +48,7 @@ static void initialise_ftpii() {
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     initialise_network();
     NANDIMG_Mount();
+    ISFS_SU();
     if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
     initialise_fat();
     printf("To remount a device, hold B on controller #1.\n");
