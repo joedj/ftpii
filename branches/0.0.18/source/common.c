@@ -78,7 +78,7 @@ static u32 NET_BUFFER_SIZE = MAX_NET_BUFFER_SIZE;
 static bool fatInitState = false;
 static bool _dvd_mountWait = false;
 static u64 dvd_last_stopped = 0;
-static u32 device_check_iteration = 0;
+static u32 device_check_iteration = 1;
 
 bool hbc_stub() {
     return !!*(u32 *)0x80001800;
@@ -151,7 +151,6 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     if (is_dvd(partition)) {
         if (partition == PA_DVD) {
             if (!dvd_mountWait()) {
-                VIDEO_WaitVSync();
                 u32 status;
                 if (!DI_GetCoverRegister(&status)) partition->inserted = (status & 2) == 2;
             }
