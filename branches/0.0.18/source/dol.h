@@ -28,6 +28,6 @@ misrepresented as being the original software.
 
 #include <gctypes.h>
 
-void run_dol(void *dol, struct __argv *argv);
+void run_dol(const void *dol, struct __argv *argv);
 
 #endif /* _DOL_H */
