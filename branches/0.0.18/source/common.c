@@ -149,9 +149,14 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     bool already_inserted = partition->inserted || mounted(partition);
     if (!already_inserted && partition == PA_SD) partition->disc->startup();
     if (is_dvd(partition)) {
-        if (!dvd_mountWait()) {
-            u32 status;
-            if (!DI_GetCoverRegister(&status)) partition->inserted = (status & 2) == 2;
+        if (partition == PA_DVD) {
+            if (!dvd_mountWait()) {
+                VIDEO_WaitVSync();
+                u32 status;
+                if (!DI_GetCoverRegister(&status)) partition->inserted = (status & 2) == 2;
+            }
+        } else {
+            partition->inserted = PA_DVD->inserted;
         }
     } else {
         partition->inserted = partition->disc->isInserted();        
@@ -278,7 +283,7 @@ bool unmount_virtual(const char *dir) {
 }
 
 void check_removable_devices() {
-    if (device_check_iteration++ % 200) return;
+    if (device_check_iteration++ % 400) return;
 
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
