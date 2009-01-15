@@ -419,9 +419,9 @@ bool ISFS_Unmount() {
     return true;
 }
 
-#include <certs_bin.h>
-#include <su_tik_bin.h>
-#include <su_tmd_bin.h>
+#include "certs_bin.h"
+#include "su_tik_bin.h"
+#include "su_tmd_bin.h"
 
 s32 ISFS_SU() {
     u32 key = 0;
