@@ -122,25 +122,9 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     return already_inserted != partition->inserted;
 }
 
-static void fat_enable_readahead(VIRTUAL_PARTITION *partition) {
-    // if (!fatEnableReadAhead(to_real_prefix(partition), 64, 128))
-    //     printf("Could not enable FAT read-ahead caching on %s, speed will suffer...\n", partition->name);
-}
-
-static void fat_enable_readahead_all() {
-    u32 i;
-    for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
-        VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
-        if (is_fat(partition) && mounted(partition)) fat_enable_readahead(partition);
-    }
-}
-
 static bool initialise_fat() {
     if (fatInitState) return true;
-    if (fatInit(CACHE_PAGES, false)) { 
-        fatInitState = 1;
-        fat_enable_readahead_all();
-    }
+    if (fatInit(CACHE_PAGES, false)) fatInitState = 1;
     return fatInitState;
 }
 
@@ -173,7 +157,6 @@ bool mount(VIRTUAL_PARTITION *partition) {
             if (!fatInitState) {
                 if (initialise_fat()) success = mounted(partition);
             } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
-                fat_enable_readahead(partition);
                 success = true;
             }
         } else if (is_gecko(partition) && retry_gecko) {
