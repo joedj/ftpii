@@ -342,10 +342,7 @@ typedef s32 (*data_connection_handler)(client_t *client, data_connection_callbac
 
 static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (data_socket < 0) {
-        printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
-        return data_socket;
-    }
+    if (data_socket < 0) return data_socket;
     set_blocking(data_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
@@ -354,7 +351,6 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(data_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
-        printf("DEBUG: Unable to bind data socket: [%i] %s\n", -result, strerror(-result));
         net_close(data_socket);
         return result;
     }
@@ -760,9 +756,7 @@ static void process_data_events(client_t *client) {
             struct sockaddr_in data_peer_address;
             socklen_t addrlen = sizeof(data_peer_address);
             result = net_accept(client->passive_socket, (struct sockaddr *)&data_peer_address ,&addrlen);
-            if (result < 0 && result != -EAGAIN) {
-                printf("DEBUG: Unable to accept data socket: [%i] %s\n", -result, strerror(-result));
-            } else if (result >= 0) {
+            if (result >= 0) {
                 client->data_socket = result;
                 client->data_connection_connected = true;
             }

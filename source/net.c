@@ -56,11 +56,8 @@ void initialise_network() {
 
 s32 set_blocking(s32 s, bool blocking) {
     s32 flags;
-    if ((flags = net_fcntl(s, F_GETFL, 0)) < 0) {
-        printf("DEBUG: set_blocking(%i, %i): Unable to get flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
-    } else if ((flags = net_fcntl(s, F_SETFL, blocking ? (flags&~4) : (flags|4))) < 0) {
-        printf("DEBUG: set_blocking(%i, %i): Unable to set flags: [%i] %s\n", s, blocking, -flags, strerror(-flags));
-    }
+    flags = net_fcntl(s, F_GETFL, 0);
+    if (flags >= 0) flags = net_fcntl(s, F_SETFL, blocking ? (flags&~4) : (flags|4));
     return flags;
 }
 
@@ -133,16 +130,10 @@ s32 send_from_file(s32 s, FILE *f) {
     bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
-        if (result < 0) {
-            // printf("DEBUG: send_from_file() net_write error: [%i] %s\n", -result, strerror(-result));
-            goto end;
-        }
+        if (result < 0) goto end;
     }
     if (bytes_read < FREAD_BUFFER_SIZE) {
         result = -!feof(f);
-        // if (result < 0) {
-        //     printf("DEBUG: send_from_file() fread error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-        // }
         goto end;
     }
     return -EAGAIN;
@@ -161,18 +152,12 @@ s32 recv_to_file(s32 s, FILE *f) {
                 NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
                 goto try_again_with_smaller_buffer;
             }
-            // if (bytes_read != -EAGAIN) {
-            //     printf("DEBUG: recv_to_file() net_read error: [%i] %s\n", -bytes_read, strerror(-bytes_read));
-            // }
             return bytes_read;
         } else if (bytes_read == 0) {
             return 0;
         }
 
         s32 bytes_written = fwrite(buf, 1, bytes_read, f);
-        if (bytes_written < bytes_read) {
-            // printf("DEBUG: recv_to_file() fwrite error: [%i] %s\n", ferror(f), strerror(ferror(f)));
-            return -1;
-        }
+        if (bytes_written < bytes_read) return -1;
     }
 }
