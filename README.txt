@@ -34,8 +34,11 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20090105 0.0.18 Enabled SD Gecko at /gcsda and /gcsdb. (thanks dhewg!)
-                Added NAND image support at /nand (libnandimg). 
+20090118 0.0.18 Enabled SD Gecko at /gcsda and /gcsdb. (thanks dhewg!)
+                Added NAND image support at /nand (libnandimg).
+                Added NAND filesystem support at /isfs (libisfs).
+                Added detection of device removal and insertion for Front SD, SD Gecko, USB and DVD.
+                Use transparency in The Homebrew Channel icon. (thanks wilson.p.alex!)
 20081230 0.0.17 Upgraded to devkitPPC r16.
                 Fixed crash bug when mounting /fst for discs with fst_size greater than 32KB.
                 Fixed logic bug where some files under /fst appear in the wrong directories.
