@@ -29,7 +29,6 @@ following comment:
     this code was contributed by shagkur of the devkitpro team, thx!
 */
 #include <gccore.h>
-#include <gctypes.h>
 #include <ogc/machine/processor.h>
 #include <string.h>
 

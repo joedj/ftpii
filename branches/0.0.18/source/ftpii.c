@@ -24,20 +24,38 @@ misrepresented as being the original software.
 
 */
 #include <di/di.h>
-#include <fst/fst.h>
-#include <isfs/isfs.h>
-#include <iso/iso.h>
-#include <nandimg/nandimg.h>
+#include <network.h>
+#include <ogc/lwp_watchdog.h>
 #include <string.h>
 #include <unistd.h>
 #include <wiiuse/wpad.h>
-#include <wod/wod.h>
 
-#include "common.h"
+#include "dvd.h"
 #include "ftp.h"
+#include "fs.h"
+#include "net.h"
+#include "pad.h"
+#include "reset.h"
 
 static const u16 PORT = 21;
 static const char *APP_DIR_PREFIX = "ftpii_";
+
+static void initialise_video() {
+    VIDEO_Init();
+    GXRModeObj *rmode = VIDEO_GetPreferredMode(NULL);
+    VIDEO_Configure(rmode);
+    void *xfb = MEM_K0_TO_K1(SYS_AllocateFramebuffer(rmode));
+    VIDEO_SetNextFramebuffer(xfb);
+    VIDEO_ClearFrameBuffer(rmode, xfb, COLOR_BLACK);
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
+    CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
+    VIDEO_SetBlack(FALSE);
+    VIDEO_Flush();
+    VIDEO_WaitVSync();
+    if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
+}
 
 static void initialise_ftpii() {
     DI_Init();
@@ -47,10 +65,7 @@ static void initialise_ftpii() {
     initialise_reset_buttons();
     printf("To exit, hold A on controller #1 or press the reset button.\n");
     initialise_network();
-    NANDIMG_Mount();
-    ISFS_SU();
-    if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
-    initialise_fat();
+    initialise_fs();
     printf("To remount a device, hold B on controller #1.\n");
 }
 
@@ -83,18 +98,10 @@ static void process_gamecube_events() {
     }
 }
 
-static void process_dvd_events() {
-    if (dvd_mountWait() && DI_GetStatus() & DVD_READY) {
-        set_dvd_mountWait(false);
-        bool wod = false, fst = false, iso = false;
-        printf("Mounting %s...", PA_WOD->name);
-        printf((wod = WOD_Mount()) ? "succeeded.\n" : "failed.\n");
-        printf("Mounting %s...", PA_FST->name);
-        printf((fst = FST_Mount()) ? "succeeded.\n" : "failed.\n");
-        printf("Mounting %s...", PA_DVD->name);
-        printf((iso = ISO9660_Mount()) ? "succeeded.\n" : "failed.\n");
-        if (!(wod || fst || iso)) dvd_stop();
-    }
+static void process_timer_events() {
+    u64 now = gettime();
+    check_dvd_motor_timeout(now);
+    check_mount_timer(now);
 }
 
 int main(int argc, char **argv) {
@@ -110,7 +117,7 @@ int main(int argc, char **argv) {
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
         check_removable_devices();
-        process_dvd_events();
+        check_dvd_mount();
         process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
@@ -130,7 +137,6 @@ int main(int argc, char **argv) {
     DI_Close();
     ISFS_Deinitialize();
 
-    if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
-    else if (!hbc_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+    poweroff_or_sysmenu();
     return 0;
 }

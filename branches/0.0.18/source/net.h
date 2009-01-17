@@ -1,7 +1,6 @@
 /*
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
-This work is derived from Daniel Ehlers' <danielehlers@mindeye.net> srg_vrt branch.
 
 This software is provided 'as-is', without any express or implied warranty.
 In no event will the authors be held liable for any damages arising from
@@ -22,22 +21,23 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _VRT_H_
-#define _VRT_H_
+#ifndef _NET_H_
+#define _NET_H_
 
 #include <stdio.h>
-#include <sys/dir.h>
 
-char *to_real_path(char *virtual_cwd, char *virtual_path);
+void initialise_network();
 
-FILE *vrt_fopen(char *cwd, char *path, char *mode);
-int vrt_stat(char *cwd, char *path, struct stat *st);
-int vrt_chdir(char *cwd, char *path);
-int vrt_unlink(char *cwd, char *path);
-int vrt_mkdir(char *cwd, char *path, mode_t mode);
-int vrt_rename(char *cwd, char *from_path, char *to_path);
-DIR_ITER *vrt_diropen(char *cwd, char *path);
-int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st);
-int vrt_dirclose(DIR_ITER *iter);
+s32 set_blocking(s32 s, bool blocking);
 
-#endif /* _VRT_H_ */
+s32 net_close_blocking(s32 s);
+
+s32 create_server(u16 port);
+
+s32 send_exact(s32 s, char *buf, s32 length);
+
+s32 send_from_file(s32 s, FILE *f);
+
+s32 recv_to_file(s32 s, FILE *f);
+
+#endif /* _NET_H_ */
