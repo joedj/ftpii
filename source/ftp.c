@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <malloc.h>
+#include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,10 +33,13 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#include "common.h"
-#include "loader.h"
-#include "vrt.h"
+#include "dvd.h"
 #include "ftp.h"
+#include "fs.h"
+#include "loader.h"
+#include "net.h"
+#include "reset.h"
+#include "vrt.h"
 
 #define FTP_BUFFER_SIZE 1024
 #define MAX_CLIENTS 5
@@ -106,6 +110,46 @@ static void close_passive_socket(client_t *client) {
         net_close_blocking(client->passive_socket);
         client->passive_socket = -1;
     }
+}
+
+/*
+    result must be able to hold up to maxsplit+1 null-terminated strings of length strlen(s)
+    returns the number of strings stored in the result array (up to maxsplit+1)
+*/
+static u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
+    u32 num_results = 0;
+    u32 result_pos = 0;
+    u32 trim_pos = 0;
+    bool in_word = false;
+    for (; *s; s++) {
+        if (*s == sep) {
+            if (num_results <= maxsplit) {
+                in_word = false;
+                continue;
+            } else if (!trim_pos) {
+                trim_pos = result_pos;
+            }
+        } else if (trim_pos) {
+            trim_pos = 0;
+        }
+        if (!in_word) {
+            in_word = true;
+            if (num_results <= maxsplit) {
+                num_results++;
+                result_pos = 0;
+            }
+        }
+        result[num_results - 1][result_pos++] = *s;
+        result[num_results - 1][result_pos] = '\0';
+    }
+    if (trim_pos) {
+        result[num_results - 1][trim_pos] = '\0';
+    }
+    u32 i = num_results;
+    for (i = num_results; i <= maxsplit; i++) {
+        result[i][0] = '\0';
+    }
+    return num_results;
 }
 
 static s32 ftp_USER(client_t *client, char *username) {

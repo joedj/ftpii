@@ -1,7 +1,6 @@
 /*
 
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
-This work is derived from Daniel Ehlers' <danielehlers@mindeye.net> srg_vrt branch.
 
 This software is provided 'as-is', without any express or implied warranty.
 In no event will the authors be held liable for any damages arising from
@@ -22,22 +21,23 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _VRT_H_
-#define _VRT_H_
+#ifndef _DVD_H_
+#define _DVD_H_
 
-#include <stdio.h>
-#include <sys/dir.h>
+bool dvd_mountWait();
 
-char *to_real_path(char *virtual_cwd, char *virtual_path);
+void set_dvd_mountWait(bool state);
 
-FILE *vrt_fopen(char *cwd, char *path, char *mode);
-int vrt_stat(char *cwd, char *path, struct stat *st);
-int vrt_chdir(char *cwd, char *path);
-int vrt_unlink(char *cwd, char *path);
-int vrt_mkdir(char *cwd, char *path, mode_t mode);
-int vrt_rename(char *cwd, char *from_path, char *to_path);
-DIR_ITER *vrt_diropen(char *cwd, char *path);
-int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st);
-int vrt_dirclose(DIR_ITER *iter);
+u64 dvd_last_access();
 
-#endif /* _VRT_H_ */
+s32 dvd_stop();
+
+void dvd_unmount();
+
+s32 dvd_eject();
+
+void check_dvd_motor_timeout(u64 now);
+
+void check_dvd_mount();
+
+#endif /* _DVD_H_ */

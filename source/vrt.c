@@ -29,7 +29,7 @@ misrepresented as being the original software.
 #include <sys/dir.h>
 #include <unistd.h>
 
-#include "common.h"
+#include "fs.h"
 #include "vrt.h"
 
 static const u32 VRT_DEVICE_ID = 38744;

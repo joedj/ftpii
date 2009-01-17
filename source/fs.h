@@ -21,14 +21,10 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _COMMON_H_
-#define _COMMON_H_
+#ifndef _FS_H_
+#define _FS_H_
 
-#include <fat.h>
-#include <network.h>
-#include <ogcsys.h>
-#include <stdio.h>
-#include <sys/dir.h>
+#include <ogc/disc_io.h>
 
 typedef struct {
     const char *name;
@@ -52,25 +48,7 @@ VIRTUAL_PARTITION *PA_FST;
 VIRTUAL_PARTITION *PA_NAND;
 VIRTUAL_PARTITION *PA_ISFS;
 
-bool initialise_fat();
-
-u8 reset();
-
-u8 power();
-
-void set_reset_flag();
-
-void initialise_reset_buttons();
-
-bool hbc_stub();
-
-void die(char *msg, int errnum);
-
-u32 check_wiimote(u32 mask);
-
-u32 check_gamecube(u32 mask);
-
-void initialise_video();
+void initialise_fs();
 
 const char *to_real_prefix(VIRTUAL_PARTITION *partition);
 
@@ -86,37 +64,13 @@ bool unmount_virtual(const char *dir);
 
 void check_removable_devices();
 
-bool dvd_mountWait();
-
-void set_dvd_mountWait(bool state);
-
-s32 dvd_stop();
-
-s32 dvd_eject();
-
 void process_remount_event();
 
 void process_device_select_event(u32 pressed);
 
-void process_timer_events();
-
-void initialise_network();
-
-s32 set_blocking(s32 s, bool blocking);
-
-s32 net_close_blocking(s32 s);
-
-s32 create_server(u16 port);
-
-s32 send_exact(s32 s, char *buf, s32 length);
-
-s32 send_from_file(s32 s, FILE *f);
-
-s32 recv_to_file(s32 s, FILE *f);
-
-u32 split(char *s, char sep, u32 maxsplit, char *result[]);
+void check_mount_timer(u64 now);
 
 char *dirname(char *path);
 char *basename(char *path);
 
-#endif /* _COMMON_H_ */
+#endif /* _FS_H_ */

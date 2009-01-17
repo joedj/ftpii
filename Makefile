@@ -21,8 +21,8 @@ export VPATH	:= $(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
 export DEPSDIR	:= $(CURDIR)/$(BUILD)
 export LD		:= $(CC)
 
-export OFILES			:= common.o ftp.o loader.o vrt.o dol.o ftpii.o
-export PRELOADER_OFILES	:= _$(TARGET).dol.o preloader.o dol.o
+export OFILES			:= reset.o dvd.o pad.o net.o fs.o ftp.o loader.o vrt.o dol.o ftpii.o
+export PRELOADER_OFILES	:= _$(TARGET).dol.o dol.o preloader.o
 export INCLUDE			:= -I$(CURDIR)/$(BUILD) -I$(LIBOGC_INC)
 
 .PHONY: $(BUILD) clean run
