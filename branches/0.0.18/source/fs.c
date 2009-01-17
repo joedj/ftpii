@@ -42,6 +42,8 @@ misrepresented as being the original software.
 #include "dvd.h"
 #include "fs.h"
 
+#define CACHE_PAGES 8
+
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, false, &__io_gcsda },
     { "SD Gecko B", "/gcsdb", "gcsdb", "gcsdb:/", false, false, &__io_gcsdb },
@@ -64,11 +66,6 @@ VIRTUAL_PARTITION *PA_WOD   = VIRTUAL_PARTITIONS + 5;
 VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
 VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
 VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 8;
-
-static const u32 CACHE_PAGES = 8;
-
-static bool fatInitState = false;
-static u32 device_check_iteration = 1;
 
 const char *to_real_prefix(VIRTUAL_PARTITION *partition) {
     return partition->prefix;
@@ -122,10 +119,12 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     return already_inserted != partition->inserted;
 }
 
+static bool fat_initialised = false;
+
 static bool initialise_fat() {
-    if (fatInitState) return true;
-    if (fatInit(CACHE_PAGES, false)) fatInitState = 1;
-    return fatInitState;
+    if (fat_initialised) return true;
+    if (fatInit(CACHE_PAGES, false)) fat_initialised = true;
+    return fat_initialised;
 }
 
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
@@ -154,7 +153,7 @@ bool mount(VIRTUAL_PARTITION *partition) {
         bool retry_gecko = true;
         gecko_retry:
         if (partition->disc->shutdown() & partition->disc->startup()) {
-            if (!fatInitState) {
+            if (!fat_initialised) {
                 if (initialise_fat()) success = mounted(partition);
             } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
                 success = true;
@@ -206,8 +205,10 @@ bool unmount_virtual(const char *dir) {
     return unmount(to_virtual_partition(dir));
 }
 
-void check_removable_devices() {
-    if (device_check_iteration++ % 400) return;
+static u64 device_check_timer = 0;
+
+void check_removable_devices(u64 now) {
+    if (ticks_to_secs(now - device_check_timer) < 2) return;
 
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
@@ -231,6 +232,8 @@ void check_removable_devices() {
             }
         }
     }
+    
+    device_check_timer = gettime();
 }
 
 void process_remount_event() {

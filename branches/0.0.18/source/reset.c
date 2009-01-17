@@ -29,24 +29,20 @@ misrepresented as being the original software.
 #include "pad.h"
 #include "reset.h"
 
-static volatile u8 _reset = 0;
-static volatile u8 _power = 0;
+static volatile bool _reset = false;
+static volatile bool _power = false;
 
 u8 reset() {
     return _reset;
 }
 
-static u8 power() {
-    return _power;
-}
-
 void set_reset_flag() {
-    _reset = 1;
+    _reset = true;
 }
 
 static void set_power_flag() {
-    _reset = 1;
-    _power = 1;
+    _reset = true;
+    _power = true;
 }
 
 void initialise_reset_buttons() {
@@ -64,7 +60,7 @@ static bool exit_stub() {
 }
 
 void poweroff_or_sysmenu() {
-    if (power()) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
+    if (_power) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
     else if (!exit_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 }
 

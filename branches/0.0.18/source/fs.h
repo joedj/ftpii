@@ -62,7 +62,7 @@ bool mount_virtual(const char *dir);
 
 bool unmount_virtual(const char *dir);
 
-void check_removable_devices();
+void check_removable_devices(u64 now);
 
 void process_remount_event();
 
@@ -71,6 +71,7 @@ void process_device_select_event(u32 pressed);
 void check_mount_timer(u64 now);
 
 char *dirname(char *path);
+
 char *basename(char *path);
 
 #endif /* _FS_H_ */
