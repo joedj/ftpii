@@ -84,16 +84,6 @@ bool hbc_stub() {
     return !!*(u32 *)0x80001800;
 }
 
-void die(char *msg) {
-    perror(msg);
-    sleep(5);
-    if (hbc_stub()) {
-        exit(1);
-    } else {
-        SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
-    }
-}
-
 u32 check_wiimote(u32 mask) {
     WPAD_ScanPads();
     u32 pressed = WPAD_ButtonsDown(0);
@@ -429,6 +419,14 @@ static bool check_reset_synchronous() {
     return _reset || check_wiimote(WPAD_BUTTON_A) || check_gamecube(PAD_BUTTON_A);
 }
 
+void die(char *msg, int errnum) {
+    printf("%s: [%i] %s\n", msg, errnum, strerror(errnum));
+    printf("Program halted.  Press reset to exit.\n");
+    while (!check_reset_synchronous()) VIDEO_WaitVSync();
+    if (hbc_stub()) exit(1);
+    else SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
+}
+
 void initialise_network() {
     printf("Waiting for network to initialise...\n");
     s32 result = -1;
@@ -463,7 +461,7 @@ s32 net_close_blocking(s32 s) {
 
 s32 create_server(u16 port) {
     s32 server = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (server < 0) die("Error creating socket, exiting");
+    if (server < 0) die("Error creating socket", -server);
     set_blocking(server, false);
 
     struct sockaddr_in bindAddress;
@@ -472,13 +470,14 @@ s32 create_server(u16 port) {
     bindAddress.sin_port = htons(port);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (net_bind(server, (struct sockaddr *)&bindAddress, sizeof(bindAddress)) < 0) {
+    s32 ret;
+    if ((ret = net_bind(server, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
         net_close(server);
-        die("Error binding socket");
+        die("Error binding socket", -ret);
     }
-    if (net_listen(server, 3) < 0) {
+    if ((ret = net_listen(server, 3)) < 0) {
         net_close(server);
-        die("Error listening on socket");
+        die("Error listening on socket", -ret);
     }
 
     return server;

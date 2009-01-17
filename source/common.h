@@ -64,7 +64,7 @@ void initialise_reset_buttons();
 
 bool hbc_stub();
 
-void die(char *msg);
+void die(char *msg, int errnum);
 
 u32 check_wiimote(u32 mask);
 

@@ -78,7 +78,7 @@ void set_ftp_password(char *new_password) {
     if (password) free(password);
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
-        if (!password) die("Unable to allocate memory for password, exiting");
+        if (!password) die("Unable to allocate memory for password", errno);
         strcpy((char *)password, new_password);
     } else {
         password = NULL;
@@ -660,7 +660,7 @@ static void process_accept_events(s32 server) {
     while ((peer = net_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -EAGAIN) {
         if (peer < 0) {
             net_close(server);
-            die("Error accepting connection");
+            die("Error accepting connection", -peer);
         }
 
         printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
