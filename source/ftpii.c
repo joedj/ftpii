@@ -102,6 +102,7 @@ static void process_timer_events() {
     u64 now = gettime();
     check_dvd_motor_timeout(now);
     check_mount_timer(now);
+    check_removable_devices(now);
 }
 
 int main(int argc, char **argv) {
@@ -116,13 +117,11 @@ int main(int argc, char **argv) {
     s32 server = create_server(PORT);
     printf("Listening on TCP port %u...\n", PORT);
     while (!reset()) {
-        check_removable_devices();
         check_dvd_mount();
         process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
         process_timer_events();
-        usleep(5000);
     }
     cleanup_ftp();
     net_close(server);
