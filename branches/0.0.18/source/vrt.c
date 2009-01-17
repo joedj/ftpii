@@ -131,7 +131,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
         const char *alias = partition->alias;
         size_t alias_len = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
-            prefix = to_real_prefix(partition);
+            prefix = partition->prefix;
             rest += alias_len;
             if (*rest == '/') rest++;
             break;

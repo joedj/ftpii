@@ -50,8 +50,6 @@ VIRTUAL_PARTITION *PA_ISFS;
 
 void initialise_fs();
 
-const char *to_real_prefix(VIRTUAL_PARTITION *partition);
-
 bool mounted(VIRTUAL_PARTITION *partition);
 
 bool mount(VIRTUAL_PARTITION *partition);
