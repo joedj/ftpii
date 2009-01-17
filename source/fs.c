@@ -67,10 +67,6 @@ VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
 VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
 VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 8;
 
-const char *to_real_prefix(VIRTUAL_PARTITION *partition) {
-    return partition->prefix;
-}
-
 static VIRTUAL_PARTITION *to_virtual_partition(const char *virtual_prefix) {
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++)
@@ -92,7 +88,7 @@ static bool is_dvd(VIRTUAL_PARTITION *partition) {
 }
 
 bool mounted(VIRTUAL_PARTITION *partition) {
-    DIR_ITER *dir = diropen(to_real_prefix(partition));
+    DIR_ITER *dir = diropen(partition->prefix);
     if (dir) {
         dirclose(dir);
         return true;
@@ -189,7 +185,7 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         else if (partition == PA_FST) success = FST_Unmount();
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
     } else if (is_fat(partition)) {
-        fatUnmount(to_real_prefix(partition));
+        fatUnmount(partition->prefix);
         success = true;
     } else if (partition == PA_NAND) {
         success = NANDIMG_Unmount();
