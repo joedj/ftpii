@@ -201,10 +201,10 @@ bool unmount_virtual(const char *dir) {
     return unmount(to_virtual_partition(dir));
 }
 
-static u64 device_check_timer = 0;
+static s64 device_check_timer = 0;
 
 void check_removable_devices(u64 now) {
-    if (ticks_to_secs(now - device_check_timer) < 2) return;
+    if (now <= device_check_timer) return;
 
     u32 i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
@@ -229,7 +229,7 @@ void check_removable_devices(u64 now) {
         }
     }
     
-    device_check_timer = gettime();
+    device_check_timer = gettime() + secs_to_ticks(2);
 }
 
 void process_remount_event() {
