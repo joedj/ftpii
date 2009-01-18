@@ -1,21 +1,21 @@
-export FTPII_VERSION=$1
+export VERSION=$1
 
 cd `dirname $0`
 wd=`pwd`
 base=`basename $wd`
 cd ..
 
-cp -R $base $FTPII_VERSION && \
-cd $FTPII_VERSION/source && \
+cp -R $base $VERSION && \
+cd $VERSION && \
 make clean && \
 make && \
-cd .. && \
 mkdir ftpii && \
 mv README.txt LICENSE.txt hbc/* ftpii && \
-cp source/ftpii.dol ftpii/boot.dol && \
-rm -rf source hbc patches && \
+mv ftpii.dol ftpii/boot.dol && \
+make clean && \
+rm -rf Makefile data source hbc patches && \
 (find . -name .svn | xargs rm -rf) && \
 rm release.sh && \
 cd .. && \
-zip -r $FTPII_VERSION.zip $FTPII_VERSION && \
-rm -rf $FTPII_VERSION
+zip -r $VERSION.zip $VERSION && \
+rm -rf $VERSION

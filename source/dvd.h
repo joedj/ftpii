@@ -1,7 +1,5 @@
 /*
 
-ftpii -- an FTP server for the Wii
-
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
 This software is provided 'as-is', without any express or implied warranty.
@@ -23,11 +21,23 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _DOL_H_
-#define _DOL_H_
+#ifndef _DVD_H_
+#define _DVD_H_
 
-#include <gctypes.h>
+bool dvd_mountWait();
 
-void run_dol(const void *dol, struct __argv *argv);
+void set_dvd_mountWait(bool state);
 
-#endif /* _DOL_H */
+u64 dvd_last_access();
+
+s32 dvd_stop();
+
+void dvd_unmount();
+
+s32 dvd_eject();
+
+void check_dvd_motor_timeout(u64 now);
+
+void check_dvd_mount();
+
+#endif /* _DVD_H_ */
