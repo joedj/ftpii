@@ -26,6 +26,8 @@ misrepresented as being the original software.
 
 #include <stdio.h>
 
+extern u32 net_gethostip();
+
 void initialise_network();
 
 s32 set_blocking(s32 s, bool blocking);
