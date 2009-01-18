@@ -21,60 +21,10 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _COMMON_H_
-#define _COMMON_H_
+#ifndef _NET_H_
+#define _NET_H_
 
-#include <fat.h>
-#include <network.h>
-#include <ogcsys.h>
 #include <stdio.h>
-#include <sys/dir.h>
-
-typedef enum { PA_SD = 0, PA_USB, PA_DVD, PA_WOD, PA_FST } VIRTUAL_PARTITION;
-const char *VIRTUAL_PARTITION_ALIASES[5];
-const u32 MAX_VIRTUAL_PARTITION_ALIASES;
-
-bool initialise_fat();
-
-u8 reset();
-
-u8 power();
-
-void set_reset_flag();
-
-void initialise_reset_buttons();
-
-bool hbc_stub();
-
-void die(char *msg);
-
-u32 check_wiimote(u32 mask);
-
-u32 check_gamecube(u32 mask);
-
-void initialise_video();
-
-const char *to_real_prefix(VIRTUAL_PARTITION partition);
-
-bool mount_virtual(char *dir);
-
-bool unmount_virtual(char *dir);
-
-bool mounted(VIRTUAL_PARTITION partition);
-
-bool dvd_mountWait();
-
-void set_dvd_mountWait(bool state);
-
-s32 dvd_stop();
-
-s32 dvd_eject();
-
-void process_remount_event();
-
-void process_device_select_event(u32 pressed);
-
-void process_timer_events();
 
 void initialise_network();
 
@@ -90,11 +40,4 @@ s32 send_from_file(s32 s, FILE *f);
 
 s32 recv_to_file(s32 s, FILE *f);
 
-u32 split(char *s, char sep, u32 maxsplit, char *result[]);
-
-char *dirname(char *path);
-char *basename(char *path);
-
-extern u32 net_gethostip();
-
-#endif /* _COMMON_H_ */
+#endif /* _NET_H_ */

@@ -1,7 +1,5 @@
 /*
 
-ftpii -- an FTP server for the Wii
-
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
 This software is provided 'as-is', without any express or implied warranty.
@@ -23,11 +21,13 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _DOL_H_
-#define _DOL_H_
+#ifndef _PAD_H_
+#define _PAD_H_
 
 #include <gctypes.h>
 
-void run_dol(const void *dol, struct __argv *argv);
+u32 check_wiimote(u32 mask);
 
-#endif /* _DOL_H */
+u32 check_gamecube(u32 mask);
+
+#endif /* _PAD_H */

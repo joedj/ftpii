@@ -1,7 +1,5 @@
 /*
 
-ftpii -- an FTP server for the Wii
-
 Copyright (C) 2008 Joseph Jordan <joe.ftpii@psychlaw.com.au>
 
 This software is provided 'as-is', without any express or implied warranty.
@@ -23,11 +21,19 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#ifndef _DOL_H_
-#define _DOL_H_
+#ifndef _RESET_H_
+#define _RESET_H_
 
-#include <gctypes.h>
+u8 reset();
 
-void run_dol(const void *dol, struct __argv *argv);
+void set_reset_flag();
 
-#endif /* _DOL_H */
+void initialise_reset_buttons();
+
+void die(char *msg, int errnum);
+
+bool check_reset_synchronous();
+
+void poweroff_or_sysmenu();
+
+#endif /* _RESET_H_ */

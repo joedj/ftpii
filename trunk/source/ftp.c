@@ -25,6 +25,7 @@ misrepresented as being the original software.
 */
 #include <errno.h>
 #include <malloc.h>
+#include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,10 +33,13 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#include "common.h"
-#include "loader.h"
-#include "vrt.h"
+#include "dvd.h"
 #include "ftp.h"
+#include "fs.h"
+#include "loader.h"
+#include "net.h"
+#include "reset.h"
+#include "vrt.h"
 
 #define FTP_BUFFER_SIZE 1024
 #define MAX_CLIENTS 5
@@ -78,7 +82,7 @@ void set_ftp_password(char *new_password) {
     if (password) free(password);
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
-        if (!password) die("Unable to allocate memory for password, exiting");
+        if (!password) die("Unable to allocate memory for password", errno);
         strcpy((char *)password, new_password);
     } else {
         password = NULL;
@@ -106,6 +110,46 @@ static void close_passive_socket(client_t *client) {
         net_close_blocking(client->passive_socket);
         client->passive_socket = -1;
     }
+}
+
+/*
+    result must be able to hold up to maxsplit+1 null-terminated strings of length strlen(s)
+    returns the number of strings stored in the result array (up to maxsplit+1)
+*/
+static u32 split(char *s, char sep, u32 maxsplit, char *result[]) {
+    u32 num_results = 0;
+    u32 result_pos = 0;
+    u32 trim_pos = 0;
+    bool in_word = false;
+    for (; *s; s++) {
+        if (*s == sep) {
+            if (num_results <= maxsplit) {
+                in_word = false;
+                continue;
+            } else if (!trim_pos) {
+                trim_pos = result_pos;
+            }
+        } else if (trim_pos) {
+            trim_pos = 0;
+        }
+        if (!in_word) {
+            in_word = true;
+            if (num_results <= maxsplit) {
+                num_results++;
+                result_pos = 0;
+            }
+        }
+        result[num_results - 1][result_pos++] = *s;
+        result[num_results - 1][result_pos] = '\0';
+    }
+    if (trim_pos) {
+        result[num_results - 1][trim_pos] = '\0';
+    }
+    u32 i = num_results;
+    for (i = num_results; i <= maxsplit; i++) {
+        result[i][0] = '\0';
+    }
+    return num_results;
 }
 
 static s32 ftp_USER(client_t *client, char *username) {
@@ -298,10 +342,7 @@ typedef s32 (*data_connection_handler)(client_t *client, data_connection_callbac
 
 static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (data_socket < 0) {
-        printf("DEBUG: Unable to create data socket: [%i] %s\n", -data_socket, strerror(-data_socket));
-        return data_socket;
-    }
+    if (data_socket < 0) return data_socket;
     set_blocking(data_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
@@ -310,7 +351,6 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(data_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
-        printf("DEBUG: Unable to bind data socket: [%i] %s\n", -result, strerror(-result));
         net_close(data_socket);
         return result;
     }
@@ -418,6 +458,7 @@ static s32 ftp_RETR(client_t *client, char *path) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
+    setbuf(f, NULL);
 
     int fd = fileno(f);
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
@@ -659,7 +700,7 @@ static void process_accept_events(s32 server) {
     while ((peer = net_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -EAGAIN) {
         if (peer < 0) {
             net_close(server);
-            die("Error accepting connection");
+            die("Error accepting connection", -peer);
         }
 
         printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
@@ -715,9 +756,7 @@ static void process_data_events(client_t *client) {
             struct sockaddr_in data_peer_address;
             socklen_t addrlen = sizeof(data_peer_address);
             result = net_accept(client->passive_socket, (struct sockaddr *)&data_peer_address ,&addrlen);
-            if (result < 0 && result != -EAGAIN) {
-                printf("DEBUG: Unable to accept data socket: [%i] %s\n", -result, strerror(-result));
-            } else if (result >= 0) {
+            if (result >= 0) {
                 client->data_socket = result;
                 client->data_connection_connected = true;
             }

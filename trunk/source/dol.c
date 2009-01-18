@@ -29,7 +29,6 @@ following comment:
     this code was contributed by shagkur of the devkitpro team, thx!
 */
 #include <gccore.h>
-#include <gctypes.h>
 #include <ogc/machine/processor.h>
 #include <string.h>
 
@@ -49,7 +48,7 @@ typedef struct {
     u32 entry_point;
 } dolheader;
 
-static u32 load_dol_image(void *dolstart, struct __argv *argv) {
+static u32 load_dol_image(const void *dolstart, struct __argv *argv) {
     dolheader *dolfile = (dolheader *)dolstart;
     u32 i;
     for (i = 0; i < 7; i++) {
@@ -68,13 +67,13 @@ static u32 load_dol_image(void *dolstart, struct __argv *argv) {
     if (argv && argv->argvMagic == ARGV_MAGIC) {
         void *new_argv = (void *)(dolfile->entry_point + 8);
         memmove(new_argv, argv, sizeof(*argv));
-        DCFlushRangeNoSync(new_argv, sizeof(*argv));
+        DCFlushRange(new_argv, sizeof(*argv));
     }
 
     return dolfile->entry_point;
 }
 
-void run_dol(void *dol, struct __argv *argv) {
+void run_dol(const void *dol, struct __argv *argv) {
     u32 level;
     void (*ep)() = (void(*)())load_dol_image(dol, argv);
     __IOS_ShutdownSubsystems();

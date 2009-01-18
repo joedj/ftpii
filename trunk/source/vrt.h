@@ -25,6 +25,7 @@ misrepresented as being the original software.
 #ifndef _VRT_H_
 #define _VRT_H_
 
+#include <stdio.h>
 #include <sys/dir.h>
 
 char *to_real_path(char *virtual_cwd, char *virtual_path);

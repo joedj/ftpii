@@ -25,9 +25,8 @@ misrepresented as being the original software.
 */
 #include <gccore.h>
 
+#include "_ftpii_dol.h"
 #include "dol.h"
-
-extern u8 _ftpii_dol[];
 
 int main(int argc, char **argv) {
     VIDEO_Init();

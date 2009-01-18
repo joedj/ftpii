@@ -29,7 +29,7 @@ misrepresented as being the original software.
 #include <sys/dir.h>
 #include <unistd.h>
 
-#include "common.h"
+#include "fs.h"
 #include "vrt.h"
 
 static const u32 VRT_DEVICE_ID = 38744;
@@ -125,12 +125,13 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     }
 
     const char *prefix = NULL;
-    VIRTUAL_PARTITION i;
-    for (i = 0; i < MAX_VIRTUAL_PARTITION_ALIASES; i++) {
-        const char *alias = VIRTUAL_PARTITION_ALIASES[i];
+    u32 i;
+    for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
+        VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
+        const char *alias = partition->alias;
         size_t alias_len = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
-            prefix = to_real_prefix(i);
+            prefix = partition->prefix;
             rest += alias_len;
             if (*rest == '/') rest++;
             break;
@@ -215,7 +216,7 @@ int vrt_chdir(char *cwd, char *path) {
         return -1;
     }
     strcpy(cwd, abspath);
-    strcat(cwd, "/");
+    if (cwd[1]) strcat(cwd, "/");
     free(abspath);
     return 0;
 }
@@ -258,11 +259,12 @@ DIR_ITER *vrt_diropen(char *cwd, char *path) {
  */
 int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st) {
     if (iter->device == VRT_DEVICE_ID) {
-        for (; (int)iter->dirStruct < MAX_VIRTUAL_PARTITION_ALIASES; iter->dirStruct++) {
-            if (mounted((VIRTUAL_PARTITION)iter->dirStruct)) {
+        for (; (int)iter->dirStruct < MAX_VIRTUAL_PARTITIONS; iter->dirStruct++) {
+            VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + (int)iter->dirStruct;
+            if (mounted(partition)) {
                 st->st_mode = S_IFDIR;
                 st->st_size = 0;
-                strcpy(filename, VIRTUAL_PARTITION_ALIASES[(int)iter->dirStruct] + 1);
+                strcpy(filename, partition->alias + 1);
                 iter->dirStruct++;
                 return 0;
             }
