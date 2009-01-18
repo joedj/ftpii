@@ -201,7 +201,7 @@ bool unmount_virtual(const char *dir) {
     return unmount(to_virtual_partition(dir));
 }
 
-static s64 device_check_timer = 0;
+static u64 device_check_timer = 0;
 
 void check_removable_devices(u64 now) {
     if (now <= device_check_timer) return;
