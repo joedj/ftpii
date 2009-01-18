@@ -99,7 +99,6 @@ bool mounted(VIRTUAL_PARTITION *partition) {
 static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     if ((!partition->disc || partition->geckofail) && !is_dvd(partition)) return false;
     bool already_inserted = partition->inserted || mounted(partition);
-    if (!already_inserted && partition == PA_SD) partition->disc->startup();
     if (is_dvd(partition)) {
         if (partition == PA_DVD) {
             if (!dvd_mountWait()) {
@@ -110,7 +109,8 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
             partition->inserted = PA_DVD->inserted;
         }
     } else {
-        partition->inserted = partition->disc->isInserted();        
+        if (!already_inserted && partition == PA_SD) partition->disc->startup();
+        partition->inserted = partition->disc->isInserted();
     }
     return already_inserted != partition->inserted;
 }
