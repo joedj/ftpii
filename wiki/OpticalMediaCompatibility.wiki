@@ -2,7 +2,7 @@
 
 = Introduction =
 
-This chart identifies the compatibility of ftpii with various optical media types, given a particular DVDx installation method.
+This chart identifies the compatibility of ftpii with various optical media types, given a particular [http://wiibrew.org/wiki/DVDx DVDx] installation method.
 
 ftpii uses the DI_ReadDVD function provided by libdi.
 
