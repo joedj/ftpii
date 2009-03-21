@@ -50,7 +50,8 @@ static void initialise_video() {
 
 static bool initialise() {
     printf("Initialising...\n");
-    return ISFS_Mount();
+    if (ISFS_Initialize() == IPC_OK) return ISFS_Mount();
+    else return false;
 }
 
 int main(int argc, char **argv) {
