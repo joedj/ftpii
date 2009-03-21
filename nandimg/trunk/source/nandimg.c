@@ -128,7 +128,7 @@ static bool read_nand(s32 block) {
     if (IOS_Seek(nand_fd, block, SEEK_SET) != block) return false;
     s32 result = IOS_Read(nand_fd, block_buffer, BLOCK_SIZE);
     if (result != BLOCK_SIZE) {
-        if (result == -12) memset(block_buffer, 0xff, BLOCK_SIZE);
+        if (result == -11 || result == -12) memset(block_buffer, 0xff, BLOCK_SIZE);
         else return false;
     }
     return true;
