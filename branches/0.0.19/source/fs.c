@@ -102,6 +102,7 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     if (is_dvd(partition)) {
         if (partition == PA_DVD) {
             if (!dvd_mountWait()) {
+                usleep(2000);
                 u32 status;
                 if (!DI_GetCoverRegister(&status)) partition->inserted = (status & 2) == 2;
             }
