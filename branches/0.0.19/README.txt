@@ -34,6 +34,10 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20090426 0.0.19 Fixed spurious error when reading bad sectors from NAND.
+                Add support for SDHC Gecko. (thanks emu_kidid!)
+                Attempt to fix hang when auto-mounting DVD.
+                Fixed bug in libogc's IOS_Open that caused hangs in /isfs.
 20090118 0.0.18 Enabled SD Gecko at /gcsda and /gcsdb. (thanks dhewg!)
                 Added NAND image support at /nand (libnandimg).
                 Added NAND filesystem support at /isfs (libisfs).
