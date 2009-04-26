@@ -39,7 +39,7 @@ misrepresented as being the original software.
 
 #define DISC_SIZE_GAMECUBE 1459978240LL
 #define DISC_SIZE_WII_SINGLE 4699979776LL
-#define DISC_SIZE_WII_DUAL 8511160320LL
+#define DISC_SIZE_WII_DUAL 8511160320LL // XXX: Is this right?  7960788992 perhaps...
 
 #define REGION_CODE_USA 'E'
 #define REGION_CODE_PAL 'P'
