@@ -56,6 +56,7 @@ misrepresented as being the original software.
 #define DISC_TYPE_GC_DEMO     'D'
 #define DISC_TYPE_GC_PROMO    'P'
 #define DISC_TYPE_WII         'R'
+#define DISC_TYPE_WII_GHWT    'S'
 #define DISC_TYPE_WII_AUTO    '0'
 #define DISC_TYPE_WII_UNKNOWN '1'
 #define DISC_TYPE_WII_BACKUP  '4'
@@ -73,9 +74,6 @@ misrepresented as being the original software.
 #define DISC_NAME_WII_WIIFIT  "WiiFit channel installer"
 #define DISC_NAME_WII_DUAL    "Wii dual-layer"
 #define DISC_NAME_UNKNOWN     "Unknown disc type"
-
-#define DISC_VERSION_SINGLE 0
-#define DISC_VERSION_DUAL 1
 
 #define DIR_SEPARATOR '/'
 #define SECTOR_SIZE 0x800
@@ -406,27 +404,56 @@ typedef struct {
     const char *region;
 } DISC_INFO;
 
+typedef struct {
+    u32 count;
+    u32 table_offset;
+} __attribute__((packed)) PARTITION_TABLE_ENTRY;
+
+typedef struct {
+    u32 offset;
+    u32 type;
+} __attribute__((packed)) PARTITION_ENTRY;
+
+typedef struct {
+    u32 tmd_size;
+    u32 tmd_offset;
+    u32 cert_chain_size;
+    u32 cert_chain_offset;
+    u32 h3_offset;
+    u32 data_offset;
+    u32 data_size;
+} __attribute__((packed)) PARTITION_INFO;
+
+static int _read(void *ptr, u64 offset, u32 len) {
+    u32 sector = offset / SECTOR_SIZE;
+    u32 sector_offset = offset % SECTOR_SIZE;
+    len = MIN(BUFFER_SIZE - sector_offset, len);
+    if (DI_ReadDVD(read_buffer, BUFFER_SIZE / SECTOR_SIZE, sector)) {
+        last_access = gettime();
+        return -1;
+    }
+    last_access = gettime();
+    memcpy(ptr, read_buffer + sector_offset, len);
+    return len;
+}
+
 static bool get_disc_info(DISC_INFO *info) {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
     memcpy(&info->header, read_buffer, sizeof(DISC_HEADER));
     info->size = DISC_SIZE_WII_SINGLE;
     info->disc_type = DISC_NAME_UNKNOWN;
-    if (info->header.disc_version == DISC_VERSION_DUAL) {
-        info->disc_type = DISC_NAME_WII_DUAL;
-        info->size = DISC_SIZE_WII_DUAL;
-    } else {
-        switch (info->header.disc_id) {
-            case DISC_TYPE_GC:          info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC;        break;
-            case DISC_TYPE_GC_WIIKEY:   info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_WIIKEY; break;
-            case DISC_TYPE_GC_UTIL:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_UTIL;   break;
-            case DISC_TYPE_GC_DEMO:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_DEMO;   break;
-            case DISC_TYPE_GC_PROMO:    info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_PROMO;  break;
-            case DISC_TYPE_WII:         info->disc_type = DISC_NAME_WII;         break;
-            case DISC_TYPE_WII_AUTO:    info->disc_type = DISC_NAME_WII_AUTO;    break;
-            case DISC_TYPE_WII_UNKNOWN: info->disc_type = DISC_NAME_WII_UNKNOWN; break;
-            case DISC_TYPE_WII_BACKUP:  info->disc_type = DISC_NAME_WII_BACKUP;  break;
-            case DISC_TYPE_WII_WIIFIT:  info->disc_type = DISC_NAME_WII_WIIFIT;  break;
-        }
+    switch (info->header.disc_id) {
+        case DISC_TYPE_GC:          info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC;        break;
+        case DISC_TYPE_GC_WIIKEY:   info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_WIIKEY; break;
+        case DISC_TYPE_GC_UTIL:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_UTIL;   break;
+        case DISC_TYPE_GC_DEMO:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_DEMO;   break;
+        case DISC_TYPE_GC_PROMO:    info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_PROMO;  break;
+        case DISC_TYPE_WII:         info->disc_type = DISC_NAME_WII;         break;
+        case DISC_TYPE_WII_GHWT:    info->disc_type = DISC_NAME_WII;         break;
+        case DISC_TYPE_WII_AUTO:    info->disc_type = DISC_NAME_WII_AUTO;    break;
+        case DISC_TYPE_WII_UNKNOWN: info->disc_type = DISC_NAME_WII_UNKNOWN; break;
+        case DISC_TYPE_WII_BACKUP:  info->disc_type = DISC_NAME_WII_BACKUP;  break;
+        case DISC_TYPE_WII_WIIFIT:  info->disc_type = DISC_NAME_WII_WIIFIT;  break;
     }
     switch (info->header.region_code) {
         case REGION_CODE_USA: info->region = REGION_NAME_USA;     break;
@@ -434,6 +461,34 @@ static bool get_disc_info(DISC_INFO *info) {
         case REGION_CODE_JAP: info->region = REGION_NAME_JAP;     break;
         default:              info->region = REGION_NAME_UNKNOWN; break;
     }
+
+    u64 max_offset = 0;
+    if (DI_ReadDVD(read_buffer, 1, 128)) return false;
+    PARTITION_TABLE_ENTRY tables[4];
+    memcpy(tables, read_buffer, sizeof(PARTITION_TABLE_ENTRY) * 4);
+    u32 table_index;
+    for (table_index = 0; table_index < 4; table_index++) {
+        u32 count = tables[table_index].count;
+        if (count > 0) {
+            PARTITION_ENTRY entries[count];
+            u32 table_size = sizeof(PARTITION_ENTRY) * count;
+            if (_read(entries, (u64)tables[table_index].table_offset << 2, table_size) != table_size) return false;
+            u32 partition_index;
+            for (partition_index = 0; partition_index < count; partition_index++) {
+                max_offset = MAX(max_offset, entries[partition_index].offset << 2LLU);
+                if (entries[partition_index].type != 0 && entries[partition_index].type != 1) continue;
+                PARTITION_INFO info;
+                if (_read(&info, (entries[partition_index].offset << 2LL) + sizeof(sig_rsa2048) + sizeof(tik), sizeof(info)) != sizeof(info)) return false;
+                max_offset = MAX(max_offset, (entries[partition_index].offset << 2LLU) + (info.data_offset << 2LLU) + (info.data_size << 2LLU));
+            }
+        }
+    }
+    printf("Max offset is %llu\n", max_offset);
+    if (max_offset > DISC_SIZE_WII_SINGLE) {
+        info->disc_type = DISC_NAME_WII_DUAL;
+        info->size = DISC_SIZE_WII_DUAL;
+    }
+
     return true;
 }
 
