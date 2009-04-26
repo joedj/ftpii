@@ -694,17 +694,17 @@ static bool read_disc() {
                 PARTITION *partition = partitions + partition_count;
                 partition->offset = entries[partition_index].offset;
 
-                if (!add_partition_entry(partition_count)) return false;
+                if (DI_OpenPartition(partition->offset)) continue;
+
+                if (!add_partition_entry(partition_count)) goto error;
                 DIR_ENTRY *meta_entry = add_metadata_entry(partition_count);
-                if (!meta_entry) return false;
+                if (!meta_entry) goto error;
                 DIR_ENTRY *partition_entry = meta_entry - 1;
 
-                if (!read_title_key(partition)) return false;
-                if (!read_partition_info(partition)) return false;
-                if (!add_ticket_entry(meta_entry)) return false;
-                if (!add_tmd_entry(meta_entry)) return false;
-
-                if (DI_OpenPartition(partition->offset)) return false;
+                if (!read_title_key(partition)) goto error;
+                if (!read_partition_info(partition)) goto error;
+                if (!add_ticket_entry(meta_entry)) goto error;
+                if (!add_tmd_entry(meta_entry)) goto error;
 
                 if (DI_Read(read_buffer, sizeof(FST_INFO), 0x420 >> 2)) goto error;
                 memcpy(&partition->fst_info, read_buffer, sizeof(FST_INFO));
