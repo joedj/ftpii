@@ -39,7 +39,7 @@ misrepresented as being the original software.
 
 #define DISC_SIZE_GAMECUBE 1459978240LL
 #define DISC_SIZE_WII_SINGLE 4699979776LL
-#define DISC_SIZE_WII_DUAL 8511160320LL // XXX: Is this right?  7960788992 perhaps...
+#define DISC_SIZE_WII_DUAL 8511160320LL
 
 #define REGION_CODE_USA 'E'
 #define REGION_CODE_PAL 'P'
@@ -56,6 +56,7 @@ misrepresented as being the original software.
 #define DISC_TYPE_GC_DEMO     'D'
 #define DISC_TYPE_GC_PROMO    'P'
 #define DISC_TYPE_WII         'R'
+#define DISC_TYPE_WII_GH      'S'
 #define DISC_TYPE_WII_AUTO    '0'
 #define DISC_TYPE_WII_UNKNOWN '1'
 #define DISC_TYPE_WII_BACKUP  '4'
@@ -406,33 +407,38 @@ typedef struct {
     const char *region;
 } DISC_INFO;
 
+static bool is_dual_layer() {
+    u32 dual_sector = (DISC_SIZE_WII_SINGLE / SECTOR_SIZE) + 1;
+    return !DI_ReadDVD(read_buffer, 1, dual_sector);
+}
+
 static bool get_disc_info(DISC_INFO *info) {
     if (DI_ReadDVD(read_buffer, 1, 0)) return false;
     memcpy(&info->header, read_buffer, sizeof(DISC_HEADER));
     info->size = DISC_SIZE_WII_SINGLE;
     info->disc_type = DISC_NAME_UNKNOWN;
-    if (info->header.disc_version == DISC_VERSION_DUAL) {
-        info->disc_type = DISC_NAME_WII_DUAL;
-        info->size = DISC_SIZE_WII_DUAL;
-    } else {
-        switch (info->header.disc_id) {
-            case DISC_TYPE_GC:          info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC;        break;
-            case DISC_TYPE_GC_WIIKEY:   info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_WIIKEY; break;
-            case DISC_TYPE_GC_UTIL:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_UTIL;   break;
-            case DISC_TYPE_GC_DEMO:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_DEMO;   break;
-            case DISC_TYPE_GC_PROMO:    info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_PROMO;  break;
-            case DISC_TYPE_WII:         info->disc_type = DISC_NAME_WII;         break;
-            case DISC_TYPE_WII_AUTO:    info->disc_type = DISC_NAME_WII_AUTO;    break;
-            case DISC_TYPE_WII_UNKNOWN: info->disc_type = DISC_NAME_WII_UNKNOWN; break;
-            case DISC_TYPE_WII_BACKUP:  info->disc_type = DISC_NAME_WII_BACKUP;  break;
-            case DISC_TYPE_WII_WIIFIT:  info->disc_type = DISC_NAME_WII_WIIFIT;  break;
-        }
+    switch (info->header.disc_id) {
+        case DISC_TYPE_GC:          info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC;        break;
+        case DISC_TYPE_GC_WIIKEY:   info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_WIIKEY; break;
+        case DISC_TYPE_GC_UTIL:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_UTIL;   break;
+        case DISC_TYPE_GC_DEMO:     info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_DEMO;   break;
+        case DISC_TYPE_GC_PROMO:    info->size = DISC_SIZE_GAMECUBE; info->disc_type = DISC_NAME_GC_PROMO;  break;
+        case DISC_TYPE_WII_GH:
+        case DISC_TYPE_WII:         info->disc_type = DISC_NAME_WII;         break;
+        case DISC_TYPE_WII_AUTO:    info->disc_type = DISC_NAME_WII_AUTO;    break;
+        case DISC_TYPE_WII_UNKNOWN: info->disc_type = DISC_NAME_WII_UNKNOWN; break;
+        case DISC_TYPE_WII_BACKUP:  info->disc_type = DISC_NAME_WII_BACKUP;  break;
+        case DISC_TYPE_WII_WIIFIT:  info->disc_type = DISC_NAME_WII_WIIFIT;  break;
     }
     switch (info->header.region_code) {
         case REGION_CODE_USA: info->region = REGION_NAME_USA;     break;
         case REGION_CODE_PAL: info->region = REGION_NAME_PAL;     break;
         case REGION_CODE_JAP: info->region = REGION_NAME_JAP;     break;
         default:              info->region = REGION_NAME_UNKNOWN; break;
+    }
+    if (is_dual_layer()) {
+        info->disc_type = DISC_NAME_WII_DUAL;
+        info->size = DISC_SIZE_WII_DUAL;
     }
     return true;
 }
