@@ -43,10 +43,11 @@ misrepresented as being the original software.
 #include "fs.h"
 
 #define CACHE_PAGES 8
+#define CACHE_SECTORS_PER_PAGE 64
 
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
-    { "SD Gecko A", "/gcsda", "gcsda", "gcsda:/", false, false, &__io_gcsda },
-    { "SD Gecko B", "/gcsdb", "gcsdb", "gcsdb:/", false, false, &__io_gcsdb },
+    { "SD Gecko A", "/carda", "carda", "carda:/", false, false, &__io_gcsda },
+    { "SD Gecko B", "/cardb", "cardb", "cardb:/", false, false, &__io_gcsdb },
     { "Front SD", "/sd", "sd", "sd:/", false, false, &__io_wiisd },
     { "USB storage device", "/usb", "usb", "usb:/", false, false, &__io_usbstorage },
     { "ISO9660 filesystem", "/dvd", "dvd", "dvd:/", false, false, NULL },
@@ -152,7 +153,7 @@ bool mount(VIRTUAL_PARTITION *partition) {
         if (partition->disc->shutdown() & partition->disc->startup()) {
             if (!fat_initialised) {
                 if (initialise_fat()) success = mounted(partition);
-            } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES)) {
+            } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
                 success = true;
             }
         } else if (is_gecko(partition) && retry_gecko) {
