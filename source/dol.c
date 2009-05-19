@@ -56,13 +56,11 @@ static u32 load_dol_image(const void *dolstart, struct __argv *argv) {
         ICInvalidateRange((void *)dolfile->text_start[i], dolfile->text_size[i]);
         memmove((void *)dolfile->text_start[i], dolstart+dolfile->text_pos[i], dolfile->text_size[i]);
     }
-    for(i = 0; i < 11; i++) {
+    for (i = 0; i < 11; i++) {
         if (!dolfile->data_size[i] || dolfile->data_start[i] < 0x100) continue;
-        memmove((void*)dolfile->data_start[i], dolstart+dolfile->data_pos[i], dolfile->data_size[i]);
+        memmove((void *)dolfile->data_start[i], dolstart+dolfile->data_pos[i], dolfile->data_size[i]);
         DCFlushRangeNoSync((void *)dolfile->data_start[i], dolfile->data_size[i]);
     }
-    memset((void *)dolfile->bss_start, 0, dolfile->bss_size);
-    DCFlushRange((void *)dolfile->bss_start, dolfile->bss_size);
 
     if (argv && argv->argvMagic == ARGV_MAGIC) {
         void *new_argv = (void *)(dolfile->entry_point + 8);
