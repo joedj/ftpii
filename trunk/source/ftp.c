@@ -478,6 +478,7 @@ static s32 stor_or_append(client_t *client, FILE *f) {
     if (!f) {
         return write_reply(client, 550, strerror(errno));
     }
+    setbuf(f, NULL);
     s32 result = prepare_data_connection(client, recv_to_file, f, fclose);
     if (result < 0) fclose(f);
     return result;
