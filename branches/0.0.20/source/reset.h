@@ -34,6 +34,6 @@ void die(char *msg, int errnum);
 
 bool check_reset_synchronous();
 
-void poweroff_or_sysmenu();
+void maybe_poweroff();
 
 #endif /* _RESET_H_ */
