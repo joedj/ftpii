@@ -50,7 +50,11 @@ void initialise_network() {
             ip = net_gethostip();
             if (!ip) printf("net_gethostip() failed, retrying...\n");
         } while (!check_reset_synchronous() && !ip);
-        if (ip) printf("Network initialised.  Wii IP address: %s\n", inet_ntoa(*(struct in_addr *)&ip));
+        if (ip) {
+            struct in_addr addr;
+            addr.s_addr = ip;
+            printf("Network initialised.  Wii IP address: %s\n", inet_ntoa(addr));
+        }
     }
 }
 

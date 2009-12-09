@@ -314,7 +314,9 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     char reply[49];
     u16 port = bindAddress.sin_port;
     u32 ip = net_gethostip();
-    printf("Listening for data connections at %s:%u...\n", inet_ntoa(*(struct in_addr *)&ip), port);
+    struct in_addr addr;
+    addr.s_addr = ip;
+    printf("Listening for data connections at %s:%u...\n", inet_ntoa(addr), port);
     sprintf(reply, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
     return write_reply(client, 227, reply);
 }
