@@ -288,13 +288,6 @@ void check_mount_timer(u64 now) {
     if (mount_timer && now > mount_timer) process_remount_event();
 }
 
-/*
-    Returns a copy of path up to the last '/' character,
-    If path does not contain '/', returns "".
-    Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
-    This function is not thread-safe.
-*/
-
 void initialise_fs() {
     NANDIMG_Mount();
     ISFS_SU();
@@ -302,6 +295,12 @@ void initialise_fs() {
     initialise_fat();
 }
 
+/*
+    Returns a copy of path up to the last '/' character,
+    If path does not contain '/', returns "".
+    Returns a pointer to internal static storage space that will be overwritten by subsequent calls.
+    This function is not thread-safe.
+*/
 char *dirname(char *path) {
     static char result[MAXPATHLEN];
     strncpy(result, path, MAXPATHLEN - 1);
