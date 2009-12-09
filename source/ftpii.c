@@ -137,6 +137,6 @@ int main(int argc, char **argv) {
     DI_Close();
     ISFS_Deinitialize();
 
-    poweroff_or_sysmenu();
+    maybe_poweroff();
     return 0;
 }
