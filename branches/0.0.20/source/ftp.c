@@ -409,7 +409,9 @@ static s32 send_list(s32 data_socket, DIR_ITER *dir) {
     struct stat st;
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     while (vrt_dirnext(dir, filename, &st) == 0) {
-        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu Jan 01  1970 %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, filename);
+        char timestamp[13];
+        strftime(timestamp, sizeof(timestamp), "%b %d  %Y", localtime(&st.st_mtime));
+        sprintf(line, "%crwxr-xr-x    1 0        0     %10llu %s %s\r\n", (st.st_mode & S_IFDIR) ? 'd' : '-', st.st_size, timestamp, filename);
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
