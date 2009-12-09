@@ -29,6 +29,7 @@ misrepresented as being the original software.
 #include <nandimg/nandimg.h>
 #include <ogc/lwp_watchdog.h>
 #include <ogc/mutex.h>
+#include <ogc/system.h>
 #include <ogc/usbstorage.h>
 #include <sdcard/gcsd.h>
 #include <sdcard/wiisd_io.h>
