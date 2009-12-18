@@ -35,6 +35,7 @@ For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/li
 
 20091210 0.0.20 Show real timestamps in directory listings.
                 Upgraded to devkitPPC r19.
+                Added OTP filesystem support at /otp (libotp).
 20090426 0.0.19 Fixed spurious error when reading bad sectors from NAND.
                 Add support for SDHC Gecko. (thanks emu_kidid!)
                 Attempt to fix hang when auto-mounting DVD.
