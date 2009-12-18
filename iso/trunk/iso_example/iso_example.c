@@ -43,6 +43,7 @@ static void initialise_video() {
     VIDEO_WaitVSync();
     if (rmode->viTVMode & VI_NON_INTERLACE) VIDEO_WaitVSync();
     CON_InitEx(rmode, 20, 30, rmode->fbWidth - 40, rmode->xfbHeight - 60);
+    CON_EnableGecko(1, 0);
     VIDEO_SetBlack(FALSE);
     VIDEO_Flush();
     VIDEO_WaitVSync();
@@ -89,6 +90,5 @@ int main(int argc, char **argv) {
     printf("Exiting in 5 seconds...\n");
     sleep(5);
 
-    if (!*(u32 *)0x80001800) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
     return 0;
 }
