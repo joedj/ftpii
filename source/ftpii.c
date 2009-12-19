@@ -132,7 +132,6 @@ int main(int argc, char **argv) {
 
     printf("\nKTHXBYE\n");
 
-    if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     dvd_stop();
     DI_Close();
     ISFS_Deinitialize();
