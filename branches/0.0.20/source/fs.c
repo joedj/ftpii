@@ -169,6 +169,8 @@ bool mount(VIRTUAL_PARTITION *partition) {
         success = NANDIMG_Mount();
     } else if (partition == PA_ISFS) {
         success = ISFS_Mount();
+    } else if (partition == PA_OTP) {
+        success = OTP_Mount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
     if (success && is_gecko(partition)) partition->geckofail = false;
@@ -197,6 +199,8 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         success = NANDIMG_Unmount();
     } else if (partition == PA_ISFS) {
         success = ISFS_Unmount();
+    } else if (partition == PA_OTP) {
+        success = OTP_Unmount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 
