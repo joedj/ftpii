@@ -33,7 +33,8 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20091221 0.0.20 Attempt to reinitialise network after failure.
+20091221 0.0.20 Make release ZIP structure compatible with HBC's new wiiload.
+                Attempt to reinitialise network after failure.
                 Added OTP filesystem support at /otp (libotp).
                 Attempt to show real timestamps in directory listings.
                 Built with devkitPPC release 19, libogc 1.8.1 (r3846), libfat 1.0.6 (r3846).
