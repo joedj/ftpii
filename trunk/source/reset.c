@@ -55,19 +55,14 @@ bool check_reset_synchronous() {
     return _reset || check_wiimote(WPAD_BUTTON_A) || check_gamecube(PAD_BUTTON_A);
 }
 
-static bool exit_stub() {
-    return !!*(u32 *)0x80001800;
-}
-
-void poweroff_or_sysmenu() {
+void maybe_poweroff() {
     if (_power) SYS_ResetSystem(SYS_POWEROFF, 0, 0);
-    else if (!exit_stub()) SYS_ResetSystem(SYS_RETURNTOMENU, 0, 0);
 }
 
 void die(char *msg, int errnum) {
     printf("%s: [%i] %s\n", msg, errnum, strerror(errnum));
     printf("Program halted.  Press reset to exit.\n");
     while (!check_reset_synchronous()) VIDEO_WaitVSync();
-    poweroff_or_sysmenu();
+    maybe_poweroff();
     exit(1);
 }

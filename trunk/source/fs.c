@@ -29,7 +29,9 @@ misrepresented as being the original software.
 #include <nandimg/nandimg.h>
 #include <ogc/lwp_watchdog.h>
 #include <ogc/mutex.h>
+#include <ogc/system.h>
 #include <ogc/usbstorage.h>
+#include <otp/otp.h>
 #include <sdcard/gcsd.h>
 #include <sdcard/wiisd_io.h>
 #include <stdio.h>
@@ -54,7 +56,8 @@ VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "Wii disc image", "/wod", "wod", "wod:/", false, false, NULL },
     { "Wii disc filesystem", "/fst", "fst", "fst:/", false, false, NULL },
     { "NAND images", "/nand", "nand", "nand:/", false, false, NULL },
-    { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, false, NULL }
+    { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, false, NULL },
+    { "OTP filesystem", "/otp", "otp", "otp:/", false, false, NULL }
 };
 const u32 MAX_VIRTUAL_PARTITIONS = (sizeof(VIRTUAL_PARTITIONS) / sizeof(VIRTUAL_PARTITION));
 
@@ -67,6 +70,7 @@ VIRTUAL_PARTITION *PA_WOD   = VIRTUAL_PARTITIONS + 5;
 VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
 VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
 VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 8;
+VIRTUAL_PARTITION *PA_OTP   = VIRTUAL_PARTITIONS + 9;
 
 static VIRTUAL_PARTITION *to_virtual_partition(const char *virtual_prefix) {
     u32 i;
@@ -165,6 +169,8 @@ bool mount(VIRTUAL_PARTITION *partition) {
         success = NANDIMG_Mount();
     } else if (partition == PA_ISFS) {
         success = ISFS_Mount();
+    } else if (partition == PA_OTP) {
+        success = OTP_Mount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
     if (success && is_gecko(partition)) partition->geckofail = false;
@@ -193,6 +199,8 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         success = NANDIMG_Unmount();
     } else if (partition == PA_ISFS) {
         success = ISFS_Unmount();
+    } else if (partition == PA_OTP) {
+        success = OTP_Unmount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 
@@ -290,6 +298,7 @@ void check_mount_timer(u64 now) {
 
 void initialise_fs() {
     NANDIMG_Mount();
+    OTP_Mount();
     ISFS_SU();
     if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
     initialise_fat();
