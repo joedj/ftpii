@@ -145,7 +145,8 @@ static int _ISFS_open_r(struct _reent *r, void *fileStruct, const char *path, in
     file->inUse = true;
     file->isfs_fd = ISFS_Open(entry->abspath, ISFS_OPEN_READ);
     if (file->isfs_fd < 0) {
-        r->_errno = -file->isfs_fd;
+        if (file->isfs_fd == ISFS_EINVAL) r->_errno = EACCES;
+        else r->_errno = -file->isfs_fd;
         return -1;
     }
 
