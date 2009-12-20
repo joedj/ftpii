@@ -115,11 +115,19 @@ int main(int argc, char **argv) {
         set_password_from_executable(argv[0]);
     }
 
-    s32 server = create_server(PORT);
-    printf("Listening on TCP port %u...\n", PORT);
+    bool network_down = true;
+    s32 server = -1;
     while (!reset()) {
+        if (network_down) {
+            net_close(server);
+            initialise_network();
+            server = create_server(PORT);
+            if (server < 0) continue;
+            printf("Listening on TCP port %u...\n", PORT);
+            network_down = false;
+        }
         check_dvd_mount();
-        process_ftp_events(server);
+        network_down = process_ftp_events(server);
         process_wiimote_events();
         process_gamecube_events();
         process_timer_events();
@@ -132,11 +140,10 @@ int main(int argc, char **argv) {
 
     printf("\nKTHXBYE\n");
 
-    if (dvd_mountWait()) printf("NOTE: Due to a known bug in libdi, ftpii is unable to exit until a DVD is inserted.\n");
     dvd_stop();
     DI_Close();
     ISFS_Deinitialize();
 
-    poweroff_or_sysmenu();
+    maybe_poweroff();
     return 0;
 }

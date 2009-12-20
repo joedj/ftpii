@@ -11,7 +11,7 @@ make clean && \
 make && \
 mkdir ftpii && \
 mv README.txt LICENSE.txt hbc/* ftpii && \
-mv ftpii.dol ftpii/boot.dol && \
+mv ftpii.elf ftpii/boot.elf && \
 make clean && \
 rm -rf Makefile data source hbc patches && \
 (find . -name .svn | xargs rm -rf) && \

@@ -1,11 +1,10 @@
-
 ftpii is an FTP server for the Nintendo Wii.
 
 
 *** USAGE ***
 
 Copy ftpii/ to /apps/ on an SD-card and use The Homebrew Channel,
-or load boot.dol using your favourite mechanism (wiiload, Twilight Hack, ISO etc...).
+or load boot.elf using your favourite mechanism (wiiload, Twilight Hack, ISO etc...).
 
 To specify a password via The Homebrew Channel, rename the apps/ftpii directory to apps/ftpii_YourPassword.
 To specify a password via wiiload, pass an argument e.g. wiiload boot.dol YourPassword.
@@ -34,6 +33,10 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20091221 0.0.20 Attempt to reinitialise network after failure.
+                Added OTP filesystem support at /otp (libotp).
+                Attempt to show real timestamps in directory listings.
+                Built with devkitPPC release 19, libogc 1.8.1 (r3846), libfat 1.0.6 (r3846).
 20090426 0.0.19 Fixed spurious error when reading bad sectors from NAND.
                 Add support for SDHC Gecko. (thanks emu_kidid!)
                 Attempt to fix hang when auto-mounting DVD.
