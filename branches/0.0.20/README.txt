@@ -33,10 +33,10 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20091221 0.0.20 Reinitialise the network after failure.
+20091221 0.0.20 Attempt to reinitialise network after failure.
                 Added OTP filesystem support at /otp (libotp).
-                Show real timestamps in directory listings.
-                Upgraded to devkitPPC r19.
+                Attempt to show real timestamps in directory listings.
+                Built with devkitPPC release 19, libogc 1.8.1 (r3846), libfat 1.0.6 (r3846).
 20090426 0.0.19 Fixed spurious error when reading bad sectors from NAND.
                 Add support for SDHC Gecko. (thanks emu_kidid!)
                 Attempt to fix hang when auto-mounting DVD.
