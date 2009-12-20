@@ -696,14 +696,14 @@ void cleanup_ftp() {
     }
 }
 
-static void process_accept_events(s32 server) {
+static bool process_accept_events(s32 server) {
     s32 peer;
     struct sockaddr_in client_address;
     socklen_t addrlen = sizeof(client_address);
     while ((peer = net_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -EAGAIN) {
         if (peer < 0) {
-            net_close(server);
-            die("Error accepting connection", -peer);
+            printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
+            return false;
         }
 
         printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
@@ -711,14 +711,14 @@ static void process_accept_events(s32 server) {
         if (num_clients == MAX_CLIENTS) {
             printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
             net_close(peer);
-            return;
+            return true;
         }
 
         client_t *client = malloc(sizeof(client_t));
         if (!client) {
             printf("Could not allocate memory for client state, not accepting client.\n");
             net_close(peer);
-            return;
+            return true;
         }
         client->socket = peer;
         client->representation_type = 'A';
@@ -750,6 +750,7 @@ static void process_accept_events(s32 server) {
             num_clients++;
         }
     }
+    return true;
 }
 
 static void process_data_events(client_t *client) {
@@ -854,8 +855,8 @@ static void process_control_events(client_t *client) {
     cleanup_client(client);
 }
 
-void process_ftp_events(s32 server) {
-    process_accept_events(server);
+bool process_ftp_events(s32 server) {
+    bool network_down = !process_accept_events(server);
     int client_index;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
         client_t *client = clients[client_index];
@@ -867,4 +868,5 @@ void process_ftp_events(s32 server) {
             }
         }
     }
+    return network_down;
 }
