@@ -16,6 +16,6 @@ make clean && \
 rm -rf Makefile data source hbc patches && \
 (find . -name .svn | xargs rm -rf) && \
 rm release.sh && \
+zip -r ../$VERSION.zip ftpii && \
 cd .. && \
-zip -r $VERSION.zip $VERSION && \
 rm -rf $VERSION
