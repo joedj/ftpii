@@ -17,3 +17,7 @@ ftpii uses the DI_ReadDVD function provided by libdi.
 
 Use Normal when attempting to read DVD-ROM without a chip.
 Use PatchMii otherwise.
+
+= dvdx_iosswitch =
+
+DVDx no longer has an "Advanced" installation option that allows you to choose which IOS it uses, so here is a program that modifies a DVDx installation to use a different IOS.  This program requires an IOS in slot 249 that allows fake-signed ES_Identify, such as "cIOS38rev14": [http://users.on.net/~jjordan/dvdx_iosswitch_0.1.tgz dvdx_iosswitch]
