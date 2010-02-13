@@ -31,4 +31,4 @@ misrepresented as being the original software.
 bool NANDIMG_Mount();
 bool NANDIMG_Unmount();
 
-#endif /* _NANDIMG_H_ */
+#endif /* _NANDIMG_H */

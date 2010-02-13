@@ -31,4 +31,4 @@ misrepresented as being the original software.
 bool OTP_Mount();
 bool OTP_Unmount();
 
-#endif /* _OTP_H_ */
+#endif /* _OTP_H */

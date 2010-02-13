@@ -34,4 +34,4 @@ bool ISFS_Mount();
 bool ISFS_Unmount();
 s32 ISFS_SU();
 
-#endif /* _LIBISFS_H_ */
+#endif /* _LIBISFS_H */

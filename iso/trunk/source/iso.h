@@ -32,4 +32,4 @@ bool ISO9660_Mount();
 bool ISO9660_Unmount();
 u64 ISO9660_LastAccess();
 
-#endif /* _ISO_H_ */
+#endif /* _ISO_H */

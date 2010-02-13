@@ -32,4 +32,4 @@ bool FST_Mount();
 bool FST_Unmount();
 u64 FST_LastAccess();
 
-#endif /* _FST_H_ */
+#endif /* _FST_H */

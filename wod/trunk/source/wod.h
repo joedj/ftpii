@@ -33,4 +33,4 @@ bool WOD_Mount();
 bool WOD_Unmount();
 u64 WOD_LastAccess();
 
-#endif /* _WOD_H_ */
+#endif /* _WOD_H */
