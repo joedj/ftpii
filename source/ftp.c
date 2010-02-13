@@ -766,7 +766,7 @@ static void process_data_events(client_t *client) {
             }
         } else {
             if ((result = net_connect(client->data_socket, (struct sockaddr *)&client->address, sizeof(client->address))) < 0) {
-                if (result == -EINPROGRESS) result = -EAGAIN;
+                if (result == -EINPROGRESS || result == -EALREADY) result = -EAGAIN;
                 if (result != -EAGAIN && result != -EISCONN) printf("Unable to connect to client: [%i] %s\n", -result, strerror(-result));
             }
              if (result >= 0 || result == -EISCONN) {

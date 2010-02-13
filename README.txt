@@ -33,6 +33,7 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20100213 0.0.21 Fixed active-mode transfers. (thanks closms!)
 20091221 0.0.20 Make release ZIP structure compatible with HBC's new wiiload.
                 Attempt to reinitialise network after failure.
                 Added OTP filesystem support at /otp (libotp).
