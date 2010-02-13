@@ -3,9 +3,9 @@
     SEEPROM support
 
 Copyright (C) 2008, 2009    Sven Peter <svenpeter@gmail.com>
-Copyright (C) 2008, 2009	Haxx Enterprises <bushing@gmail.com>
-Copyright (C) 2008, 2009	Hector Martin "marcan" <marcan@marcansoft.com>
-Copyright (C) 2008, 2009	John Kelley <wiidev@kelley.ca>
+Copyright (C) 2008, 2009    Haxx Enterprises <bushing@gmail.com>
+Copyright (C) 2008, 2009    Hector Martin "marcan" <marcan@marcansoft.com>
+Copyright (C) 2008, 2009    John Kelley <wiidev@kelley.ca>
 
 # This code is licensed to you under the terms of the GNU GPL, version 2;
 # see http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
