@@ -26,7 +26,9 @@ misrepresented as being the original software.
 #include <fst/fst.h>
 #include <isfs/isfs.h>
 #include <iso/iso.h>
+#include <malloc.h>
 #include <nandimg/nandimg.h>
+#include <ntfs.h>
 #include <ogc/lwp_watchdog.h>
 #include <ogc/mutex.h>
 #include <ogc/system.h>
@@ -162,6 +164,13 @@ bool mount(VIRTUAL_PARTITION *partition) {
                 if (initialise_fat()) success = mounted(partition);
             } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
                 success = true;
+            } else {
+                sec_t *partitions;
+                int partition_count = ntfsFindPartitions(partition->disc, &partitions);
+                if (partition_count > 0 && ntfsMount(partition->mount_point, partition->disc, partitions[0], CACHE_PAGES, CACHE_SECTORS_PER_PAGE, NTFS_SU)) {
+                    success = true;
+                }
+                free(partitions);
             }
         } else if (is_gecko(partition) && retry_gecko) {
             retry_gecko = false;
@@ -199,6 +208,7 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
     } else if (is_fat(partition)) {
         fatUnmount(partition->prefix);
+        ntfsUnmount(partition->mount_point, false);
         success = true;
     } else if (partition == PA_NAND) {
         success = NANDIMG_Unmount();
