@@ -126,14 +126,6 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     return already_inserted != partition->inserted;
 }
 
-static bool fat_initialised = false;
-
-static bool initialise_fat() {
-    if (fat_initialised) return true;
-    if (fatInit(CACHE_PAGES, false)) fat_initialised = true;
-    return fat_initialised;
-}
-
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
 static mountstate_t mountstate = MOUNTSTATE_START;
 static VIRTUAL_PARTITION *mount_partition = NULL;
@@ -159,18 +151,16 @@ bool mount(VIRTUAL_PARTITION *partition) {
     } else if (is_fat(partition)) {
         bool retry_gecko = true;
         gecko_retry:
-        if (partition->disc->shutdown() & partition->disc->startup()) {
-            if (!fat_initialised) {
-                if (initialise_fat()) success = mounted(partition);
-            } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
+        if ((partition == PA_USB || partition->disc->shutdown()) & partition->disc->startup()) {
+            if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
                 success = true;
             } else {
-                sec_t *partitions;
+                sec_t *partitions = NULL;
                 int partition_count = ntfsFindPartitions(partition->disc, &partitions);
                 if (partition_count > 0 && ntfsMount(partition->mount_point, partition->disc, partitions[0], CACHE_PAGES, CACHE_SECTORS_PER_PAGE, NTFS_SU)) {
                     success = true;
                 }
-                free(partitions);
+                if (partitions) free(partitions);
             }
         } else if (is_gecko(partition) && retry_gecko) {
             retry_gecko = false;
@@ -319,7 +309,6 @@ void initialise_fs() {
     SEEPROM_Mount();
     ISFS_SU();
     if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
-    initialise_fat();
 }
 
 /*
