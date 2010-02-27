@@ -26,7 +26,9 @@ misrepresented as being the original software.
 #include <fst/fst.h>
 #include <isfs/isfs.h>
 #include <iso/iso.h>
+#include <malloc.h>
 #include <nandimg/nandimg.h>
+#include <ntfs.h>
 #include <ogc/lwp_watchdog.h>
 #include <ogc/mutex.h>
 #include <ogc/system.h>
@@ -34,6 +36,7 @@ misrepresented as being the original software.
 #include <otp/otp.h>
 #include <sdcard/gcsd.h>
 #include <sdcard/wiisd_io.h>
+#include <seeprom/seeprom.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/dir.h>
@@ -57,20 +60,22 @@ VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "Wii disc filesystem", "/fst", "fst", "fst:/", false, false, NULL },
     { "NAND images", "/nand", "nand", "nand:/", false, false, NULL },
     { "NAND filesystem", "/isfs", "isfs", "isfs:/", false, false, NULL },
-    { "OTP filesystem", "/otp", "otp", "otp:/", false, false, NULL }
+    { "OTP filesystem", "/otp", "otp", "otp:/", false, false, NULL },
+    { "SEEPROM filesystem", "/seeprom", "seeprom", "seeprom:/", false, false, NULL }
 };
 const u32 MAX_VIRTUAL_PARTITIONS = (sizeof(VIRTUAL_PARTITIONS) / sizeof(VIRTUAL_PARTITION));
 
-VIRTUAL_PARTITION *PA_GCSDA = VIRTUAL_PARTITIONS + 0;
-VIRTUAL_PARTITION *PA_GCSDB = VIRTUAL_PARTITIONS + 1;
-VIRTUAL_PARTITION *PA_SD    = VIRTUAL_PARTITIONS + 2;
-VIRTUAL_PARTITION *PA_USB   = VIRTUAL_PARTITIONS + 3;
-VIRTUAL_PARTITION *PA_DVD   = VIRTUAL_PARTITIONS + 4;
-VIRTUAL_PARTITION *PA_WOD   = VIRTUAL_PARTITIONS + 5;
-VIRTUAL_PARTITION *PA_FST   = VIRTUAL_PARTITIONS + 6;
-VIRTUAL_PARTITION *PA_NAND  = VIRTUAL_PARTITIONS + 7;
-VIRTUAL_PARTITION *PA_ISFS  = VIRTUAL_PARTITIONS + 8;
-VIRTUAL_PARTITION *PA_OTP   = VIRTUAL_PARTITIONS + 9;
+VIRTUAL_PARTITION *PA_GCSDA   = VIRTUAL_PARTITIONS + 0;
+VIRTUAL_PARTITION *PA_GCSDB   = VIRTUAL_PARTITIONS + 1;
+VIRTUAL_PARTITION *PA_SD      = VIRTUAL_PARTITIONS + 2;
+VIRTUAL_PARTITION *PA_USB     = VIRTUAL_PARTITIONS + 3;
+VIRTUAL_PARTITION *PA_DVD     = VIRTUAL_PARTITIONS + 4;
+VIRTUAL_PARTITION *PA_WOD     = VIRTUAL_PARTITIONS + 5;
+VIRTUAL_PARTITION *PA_FST     = VIRTUAL_PARTITIONS + 6;
+VIRTUAL_PARTITION *PA_NAND    = VIRTUAL_PARTITIONS + 7;
+VIRTUAL_PARTITION *PA_ISFS    = VIRTUAL_PARTITIONS + 8;
+VIRTUAL_PARTITION *PA_OTP     = VIRTUAL_PARTITIONS + 9;
+VIRTUAL_PARTITION *PA_SEEPROM = VIRTUAL_PARTITIONS + 10;
 
 static VIRTUAL_PARTITION *to_virtual_partition(const char *virtual_prefix) {
     u32 i;
@@ -121,14 +126,6 @@ static bool was_inserted_or_removed(VIRTUAL_PARTITION *partition) {
     return already_inserted != partition->inserted;
 }
 
-static bool fat_initialised = false;
-
-static bool initialise_fat() {
-    if (fat_initialised) return true;
-    if (fatInit(CACHE_PAGES, false)) fat_initialised = true;
-    return fat_initialised;
-}
-
 typedef enum { MOUNTSTATE_START, MOUNTSTATE_SELECTDEVICE, MOUNTSTATE_WAITFORDEVICE } mountstate_t;
 static mountstate_t mountstate = MOUNTSTATE_START;
 static VIRTUAL_PARTITION *mount_partition = NULL;
@@ -154,11 +151,16 @@ bool mount(VIRTUAL_PARTITION *partition) {
     } else if (is_fat(partition)) {
         bool retry_gecko = true;
         gecko_retry:
-        if (partition->disc->shutdown() & partition->disc->startup()) {
-            if (!fat_initialised) {
-                if (initialise_fat()) success = mounted(partition);
-            } else if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
+        if ((partition == PA_USB || partition->disc->shutdown()) & partition->disc->startup()) {
+            if (fatMount(partition->mount_point, partition->disc, 0, CACHE_PAGES, CACHE_SECTORS_PER_PAGE)) {
                 success = true;
+            } else {
+                sec_t *partitions = NULL;
+                int partition_count = ntfsFindPartitions(partition->disc, &partitions);
+                if (partition_count > 0 && ntfsMount(partition->mount_point, partition->disc, partitions[0], CACHE_PAGES, CACHE_SECTORS_PER_PAGE, NTFS_SU)) {
+                    success = true;
+                }
+                if (partitions) free(partitions);
             }
         } else if (is_gecko(partition) && retry_gecko) {
             retry_gecko = false;
@@ -171,6 +173,8 @@ bool mount(VIRTUAL_PARTITION *partition) {
         success = ISFS_Mount();
     } else if (partition == PA_OTP) {
         success = OTP_Mount();
+    } else if (partition == PA_SEEPROM) {
+        success = SEEPROM_Mount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
     if (success && is_gecko(partition)) partition->geckofail = false;
@@ -194,6 +198,7 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         if (!dvd_mountWait() && !dvd_last_access()) dvd_stop();
     } else if (is_fat(partition)) {
         fatUnmount(partition->prefix);
+        ntfsUnmount(partition->mount_point, false);
         success = true;
     } else if (partition == PA_NAND) {
         success = NANDIMG_Unmount();
@@ -201,6 +206,8 @@ bool unmount(VIRTUAL_PARTITION *partition) {
         success = ISFS_Unmount();
     } else if (partition == PA_OTP) {
         success = OTP_Unmount();
+    } else if (partition == PA_SEEPROM) {
+        success = SEEPROM_Unmount();
     }
     printf(success ? "succeeded.\n" : "failed.\n");
 
@@ -299,9 +306,9 @@ void check_mount_timer(u64 now) {
 void initialise_fs() {
     NANDIMG_Mount();
     OTP_Mount();
+    SEEPROM_Mount();
     ISFS_SU();
     if (ISFS_Initialize() == IPC_OK) ISFS_Mount();
-    initialise_fat();
 }
 
 /*
