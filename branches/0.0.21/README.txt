@@ -33,9 +33,10 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
-20100213 0.0.21 Added NTFS filesystem support (libntfs). (thanks shareese!)
+20100227 0.0.21 Added NTFS filesystem support (libntfs). (thanks shareese/rodries/dimok!)
                 Added SEEPROM filesystem support at /seeprom (libseeprom).
                 Fixed active-mode transfers. (thanks closms!)
+                Built with devkitPPC release 19, libogc r3938, libfat r3938.
 20091221 0.0.20 Make release ZIP structure compatible with HBC's new wiiload.
                 Attempt to reinitialise network after failure.
                 Added OTP filesystem support at /otp (libotp).

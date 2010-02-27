@@ -59,6 +59,7 @@ static void initialise_video() {
 }
 
 static void initialise_ftpii() {
+    initialise_video();
     DI_Init();
     initialise_video();
     PAD_Init();
