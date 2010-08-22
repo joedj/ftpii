@@ -24,6 +24,7 @@ misrepresented as being the original software.
 
 */
 #include <di/di.h>
+#include <iospatch/iospatch.h>
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <string.h>
@@ -59,8 +60,8 @@ static void initialise_video() {
 }
 
 static void initialise_ftpii() {
-    initialise_video();
     DI_Init();
+    IOSPATCH_Apply();
     initialise_video();
     PAD_Init();
     WPAD_Init();

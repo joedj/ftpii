@@ -33,6 +33,7 @@ joedj @ EFNet #wiidev
 
 For subversion changes since 0.0.6, see http://code.google.com/p/ftpii/source/list
 
+20100822 0.0.22 Attempt to patch more DVD and ISFS functionality into IOS at runtime.
 20100227 0.0.21 Added NTFS filesystem support (libntfs). (thanks shareese/rodries/dimok!)
                 Added SEEPROM filesystem support at /seeprom (libseeprom).
                 Fixed active-mode transfers. (thanks closms!)
