@@ -10,7 +10,7 @@ cd $VERSION && \
 make clean && \
 make && \
 mkdir ftpii && \
-mv README.txt LICENSE.txt hbc/* ftpii && \
+mv README COPYING hbc/* ftpii && \
 mv ftpii.elf ftpii/boot.elf && \
 make clean && \
 rm -rf Makefile data source hbc patches && \
