@@ -21,7 +21,6 @@ void initialise_network() {
     printf("Waiting for network to initialise...\n");
     s32 result = -1;
     while (!check_reset_synchronous() && result < 0) {
-        net_deinit();
         while (!check_reset_synchronous() && (result = net_init()) == -EAGAIN);
         if (result < 0) printf("net_init() failed: [%i] %s, retrying...\n", result, strerror(-result));
     }

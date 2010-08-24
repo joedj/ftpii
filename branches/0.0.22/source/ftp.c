@@ -278,7 +278,8 @@ static s32 ftp_PASV(client_t *client, char *rest) {
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
+    if (passive_port < 1024) passive_port = 1024;
+    bindAddress.sin_port = htons(passive_port++);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     s32 result;
     if ((result = net_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
@@ -318,9 +319,9 @@ static s32 ftp_PORT(client_t *client, char *portspec) {
     return write_reply(client, 200, "PORT command successful.");
 }
 
-typedef s32 (*data_connection_handler)(client_t *client, data_connection_callback callback, void *arg);
+typedef s32 (*data_connection_handler)(client_t *client);
 
-static s32 prepare_data_connection_active(client_t *client, data_connection_callback callback, void *arg) {
+static s32 prepare_data_connection_active(client_t *client) {
     s32 data_socket = net_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (data_socket < 0) return data_socket;
     set_blocking(data_socket, false);
@@ -340,7 +341,7 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
     return 0;
 }
 
-static s32 prepare_data_connection_passive(client_t *client, data_connection_callback callback, void *arg) {
+static s32 prepare_data_connection_passive(client_t *client) {
     client->data_socket = client->passive_socket;
     printf("Waiting for data connections...\n");
     return 0;
@@ -351,7 +352,7 @@ static s32 prepare_data_connection(client_t *client, void *callback, void *arg, 
     if (result >= 0) {
         data_connection_handler handler = prepare_data_connection_active;
         if (client->passive_socket >= 0) handler = prepare_data_connection_passive;
-        result = handler(client, (data_connection_callback)callback, arg);
+        result = handler(client);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         } else {
