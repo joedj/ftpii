@@ -39,13 +39,13 @@ static void initialise_video() {
 
 static void initialise_ftpii() {
     DI_Init();
-    IOSPATCH_Apply();
     initialise_video();
+    IOSPATCH_Apply();
+    printf("ftpii 0.0.22 (IOS %i)\n", IOS_GetVersion());
     PAD_Init();
     WPAD_Init();
     initialise_reset_buttons();
     printf("To exit, hold A on controller #1 or press the reset button.\n");
-    initialise_network();
     initialise_fs();
     printf("To remount a device, hold B on controller #1.\n");
 }
