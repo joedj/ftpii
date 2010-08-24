@@ -3,66 +3,62 @@
 // see file COPYING or http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
 #include <gccore.h>
 #include <ogc/machine/processor.h>
-#include <string.h>
+#include <stdio.h>
 
 #include "iospatch.h"
 
-#define HAVE_AHBPROT ((*(vu32*)0xcd800064 == 0xFFFFFFFF) ? 1 : 0)
-#define MEM_REG_BASE 0xd8b4000
-#define MEM_PROT (MEM_REG_BASE + 0x20a)
+#define MEM_PROT 0xd8b420a
+
+static bool have_ahbprot() {
+    return read32(0xcd800064) == 0xffffffff;
+}
 
 static void disable_memory_protection() {
     write32(MEM_PROT, read32(MEM_PROT) & 0x0000FFFF);
 }
 
-static u32 apply_patch(char *name, const u8 *old, u32 old_size, const u8 *patch, u32 patch_size, u32 patch_offset) {
-    u8 *ptr = (u8 *)0x93400000;
-    u32 found = 0;
-    u8 *location = NULL;
-    while ((u32)ptr < (0x94000000 - patch_size)) {
-        if (!memcmp(ptr, old, old_size)) {
-            found++;
-            location = ptr + patch_offset;
-            u8 *start = location;
-            u32 i;
-            for (i = 0; i < patch_size; i++) {
-                *location++ = patch[i];
-            }
-            DCFlushRange((u8 *)(((u32)start) >> 5 << 5), (patch_size >> 5 << 5) + 64);
+static bool apply_patch(char *name, u32 start, const u32 *old, const u32 *new, u32 words) {
+    u32 i;
+    printf("Attempting to apply patch %s at 0x%08x ... ", name, start);
+    for (i = 0; i < words; i++) {
+        u32 val = read32(start + (i << 2));
+        if (val != old[i]) {
+            printf("not found.\n");
+            return false;
         }
-        ptr++;
     }
-    return found;
+    fflush(stdout);
+    for (i = 0; i < words; i++) {
+        write32(start + (i << 2), new[i]);
+    }
+    printf("done!\n");
+    return true;
 }
 
-static const u8 di_readlimit_old[] = {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x01, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46, 0x0A, 0x00, 0x00, 
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
-    0x7E, 0xD4, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08
+static const u32 di_readlimit_start = 0x139b66d8;
+static const u32 di_readlimit_old[] = {
+    0x00000000, 0x00000000, 0x00000000,
+    0x00014000, 0x00000000, 0x460a0000, 
+    0x00000000, 0x00000008, 0x00000000,
+    0x7ed40000, 0x00000000, 0x00000008
 };
-static const u8 di_readlimit_patch[] = { 0x7e, 0xd4 };
+static const u32 di_readlimit_new[] = {
+    0x00000000, 0x00000000, 0x00000000,
+    0x7ed44000, 0x00000000, 0x460a0000, 
+    0x00000000, 0x00000008, 0x00000000,
+    0x7ed40000, 0x00000000, 0x00000008
+};
 
-const u8 isfs_permissions_old[] = { 0x42, 0x8B, 0xD0, 0x01, 0x25, 0x66 };
-const u8 isfs_permissions_patch[] = { 0x42, 0x8B, 0xE0, 0x01, 0x25, 0x66 };
-// static const u8 setuid_old[] = { 0xD1, 0x2A, 0x1C, 0x39 };
-// static const u8 setuid_patch[] = { 0x46, 0xC0 };
-// const u8 es_identify_old[] = { 0x28, 0x03, 0xD1, 0x23 };
-// const u8 es_identify_patch[] = { 0x00, 0x00 };
-// const u8 hash_old[] = { 0x20, 0x07, 0x23, 0xA2 };
-// const u8 hash_patch[] = { 0x00 };
-// const u8 new_hash_old[] = { 0x20, 0x07, 0x4B, 0x0B };
+static const u32 isfs_permissions_start = 0x13a11304;
+const u32 isfs_permissions_old[] = { 0x428bd001, 0x2566426d };
+const u32 isfs_permissions_new[] = { 0x428be001, 0x2566426d };
 
 u32 IOSPATCH_Apply() {
-    u32 count = 0;
-    if (HAVE_AHBPROT) {
+    u32 patches = 0;
+    if (have_ahbprot()) {
         disable_memory_protection();
-        count += apply_patch("di_readlimit", di_readlimit_old, sizeof(di_readlimit_old), di_readlimit_patch, sizeof(di_readlimit_patch), 12);
-        count += apply_patch("isfs_permissions", isfs_permissions_old, sizeof(isfs_permissions_old), isfs_permissions_patch, sizeof(isfs_permissions_patch), 0);
-        // count += apply_patch("es_setuid", setuid_old, sizeof(setuid_old), setuid_patch, sizeof(setuid_patch), 0);
-        // count += apply_patch("es_identify", es_identify_old, sizeof(es_identify_old), es_identify_patch, sizeof(es_identify_patch), 2);
-        // count += apply_patch("hash_check", hash_old, sizeof(hash_old), hash_patch, sizeof(hash_patch), 1);
-        // count += apply_patch("new_hash_check", new_hash_old, sizeof(new_hash_old), hash_patch, sizeof(hash_patch), 1);
+        patches += apply_patch("di_readlimit", di_readlimit_start, di_readlimit_old, di_readlimit_new, sizeof(di_readlimit_old) >> 2);
+        patches += apply_patch("isfs_permissions", isfs_permissions_start, isfs_permissions_old, isfs_permissions_new, sizeof(isfs_permissions_old) >> 2);
     }
-    return count;
+    return patches;
 }
