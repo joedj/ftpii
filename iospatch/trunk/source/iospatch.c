@@ -3,7 +3,6 @@
 // see file COPYING or http://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
 #include <gccore.h>
 #include <ogc/machine/processor.h>
-#include <stdio.h>
 
 #include "iospatch.h"
 
@@ -19,19 +18,15 @@ static void disable_memory_protection() {
 
 static bool apply_patch(char *name, u32 start, const u32 *old, const u32 *new, u32 words) {
     u32 i;
-    printf("Attempting to apply patch %s at 0x%08x ... ", name, start);
     for (i = 0; i < words; i++) {
         u32 val = read32(start + (i << 2));
         if (val != old[i]) {
-            printf("not found.\n");
             return false;
         }
     }
-    fflush(stdout);
     for (i = 0; i < words; i++) {
         write32(start + (i << 2), new[i]);
     }
-    printf("done!\n");
     return true;
 }
 
