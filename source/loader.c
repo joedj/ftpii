@@ -53,9 +53,7 @@ void load_from_file(FILE *f, char *arg) {
     argv.argv = &argv.commandLine;
     argv.endARGV = argv.argv + 1;
 
-    struct stat st;
     int fd = fileno(f);
-    if (fstat(fd, &st)) return;
     u8 *buf = (u8 *)0x92000000;
     if (!read_from_file(buf, f)) return;
 

@@ -49,6 +49,7 @@ misrepresented as being the original software.
 
 #define CACHE_PAGES 8
 #define CACHE_SECTORS_PER_PAGE 64
+#define MAXPATHLEN 128
 
 VIRTUAL_PARTITION VIRTUAL_PARTITIONS[] = {
     { "SD Gecko A", "/carda", "carda", "carda:/", false, false, &__io_gcsda },
@@ -98,7 +99,7 @@ static bool is_dvd(VIRTUAL_PARTITION *partition) {
 }
 
 bool mounted(VIRTUAL_PARTITION *partition) {
-    DIR_ITER *dir = diropen(partition->prefix);
+    DIR *dir = _FAT_diropen_r(partition->prefix);
     if (dir) {
         dirclose(dir);
         return true;
@@ -133,7 +134,7 @@ static u64 mount_timer = 0;
 
 bool mount(VIRTUAL_PARTITION *partition) {
     if (!partition || mounted(partition) || (is_dvd(partition) && dvd_mountWait())) return false;
-    
+
     bool success = false;
     printf("Mounting %s...", partition->name);
     if (is_dvd(partition)) {
@@ -245,7 +246,7 @@ void check_removable_devices(u64 now) {
             }
         }
     }
-    
+
     device_check_timer = gettime() + secs_to_ticks(2);
 }
 
@@ -318,9 +319,9 @@ void initialise_fs() {
     This function is not thread-safe.
 */
 char *dirname(char *path) {
-    static char result[MAXPATHLEN];
-    strncpy(result, path, MAXPATHLEN - 1);
-    result[MAXPATHLEN - 1] = '\0';
+    static char result[MAXNAMLEN];
+    strncpy(result, path, MAXNAMLEN - 1);
+    result[MAXNAMLEN - 1] = '\0';
     s32 i;
     for (i = strlen(result) - 1; i >= 0; i--) {
         if (result[i] == '/') {

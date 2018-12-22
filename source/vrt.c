@@ -44,7 +44,7 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
         strcpy(path, virtual_cwd);
         strcat(path, virtual_path);
     }
-    
+
     char *normalised_path = malloc(strlen(path) + 1);
     if (!normalised_path) goto end;
     *normalised_path = '\0';
@@ -141,7 +141,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
         errno = ENODEV;
         goto end;
     }
-    
+
     size_t real_path_size = strlen(prefix) + strlen(rest) + 1;
     if (real_path_size > MAXPATHLEN) goto end;
 
@@ -160,7 +160,7 @@ typedef void * (*path_func)(char *path, ...);
 static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_path, s32 failed, ...) {
     char *path = to_real_path(virtual_cwd, virtual_path);
     if (!path || !*path) return (void *)failed;
-    
+
     path_func f = (path_func)void_f;
     va_list ap;
     void *args[3];
@@ -172,7 +172,7 @@ static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_pa
         args[num_args++] = arg;
     } while (1);
     va_end(ap);
-    
+
     void *result;
     switch (num_args) {
         case 0: result = f(path); break;
@@ -181,7 +181,7 @@ static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_pa
         case 3: result = f(path, args[0], args[1], args[2]); break;
         default: result = (void *)failed;
     }
-    
+
     free(path);
     return result;
 }
