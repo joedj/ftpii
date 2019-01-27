@@ -43,6 +43,7 @@ misrepresented as being the original software.
 
 #define FTP_BUFFER_SIZE 1024
 #define MAX_CLIENTS 5
+#define MAXPATHLEN 128
 
 static const u16 SRC_PORT = 20;
 static const s32 EQUIT = 696969;
@@ -356,7 +357,7 @@ static s32 prepare_data_connection_active(client_t *client, data_connection_call
         net_close(data_socket);
         return result;
     }
-    
+
     client->data_socket = data_socket;
     printf("Attempting to connect to client at %s:%u\n", inet_ntoa(client->address.sin_addr), ntohs(client->address.sin_port));
     return 0;
@@ -387,7 +388,7 @@ static s32 prepare_data_connection(client_t *client, void *callback, void *arg, 
     return result;
 }
 
-static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
+static s32 send_nlst(s32 data_socket, DIR *dir) {
     s32 result = 0;
     char filename[MAXPATHLEN + 2];
     struct stat st;
@@ -403,7 +404,7 @@ static s32 send_nlst(s32 data_socket, DIR_ITER *dir) {
     return result < 0 ? result : 0;
 }
 
-static s32 send_list(s32 data_socket, DIR_ITER *dir) {
+static s32 send_list(s32 data_socket, DIR *dir) {
     s32 result = 0;
     char filename[MAXPATHLEN];
     struct stat st;
@@ -424,7 +425,7 @@ static s32 ftp_NLST(client_t *client, char *path) {
         path = ".";
     }
 
-    DIR_ITER *dir = vrt_diropen(client->cwd, path);
+    DIR *dir = vrt_diropen(client->cwd, path);
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
@@ -447,7 +448,7 @@ static s32 ftp_LIST(client_t *client, char *path) {
         path = ".";
     }
 
-    DIR_ITER *dir = vrt_diropen(client->cwd, path);
+    DIR *dir = vrt_diropen(client->cwd, path);
     if (dir == NULL) {
         return write_reply(client, 550, strerror(errno));
     }
@@ -584,7 +585,7 @@ typedef s32 (*ftp_command_handler)(client_t *client, char *args);
 static s32 dispatch_to_handler(client_t *client, char *cmd_line, const char **commands, const ftp_command_handler *handlers) {
     char cmd[FTP_BUFFER_SIZE], rest[FTP_BUFFER_SIZE];
     char *args[] = { cmd, rest };
-    split(cmd_line, ' ', 1, args); 
+    split(cmd_line, ' ', 1, args);
     s32 i;
     for (i = 0; commands[i]; i++) {
         if (!strcasecmp(commands[i], cmd)) break;
@@ -815,7 +816,7 @@ static void process_control_events(client_t *client) {
         }
         client->offset += bytes_read;
         client->buf[client->offset] = '\0';
-    
+
         if (strchr(offset_buf, '\0') != (client->buf + client->offset)) {
             printf("Received a null byte from client, closing connection ;-)\n"); // i have decided this isn't allowed =P
             goto recv_loop_end;
@@ -829,7 +830,7 @@ static void process_control_events(client_t *client) {
                 printf("Received a line-feed from client without preceding carriage return, closing connection ;-)\n"); // i have decided this isn't allowed =P
                 goto recv_loop_end;
             }
-        
+
             if (*next) {
                 s32 result;
                 if ((result = process_command(client, next)) < 0) {
@@ -839,9 +840,9 @@ static void process_control_events(client_t *client) {
                     goto recv_loop_end;
                 }
             }
-        
+
         }
-    
+
         if (next != client->buf) { // some lines were processed
             client->offset = strlen(next);
             char tmp_buf[client->offset];

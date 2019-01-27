@@ -36,8 +36,8 @@ int vrt_chdir(char *cwd, char *path);
 int vrt_unlink(char *cwd, char *path);
 int vrt_mkdir(char *cwd, char *path, mode_t mode);
 int vrt_rename(char *cwd, char *from_path, char *to_path);
-DIR_ITER *vrt_diropen(char *cwd, char *path);
-int vrt_dirnext(DIR_ITER *iter, char *filename, struct stat *st);
-int vrt_dirclose(DIR_ITER *iter);
+DIR *vrt_diropen(char *cwd, char *path);
+int vrt_dirnext(DIR *iter, char *filename, struct stat *st);
+int vrt_dirclose(DIR *iter);
 
 #endif /* _VRT_H_ */
